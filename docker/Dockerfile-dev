@@ -1,0 +1,24 @@
+FROM debian:bullseye-slim AS builder
+ARG DOCKER_TAG
+ARG BUILD_CONCURRENCY
+RUN mkdir -p /src  && mkdir -p /opt
+
+RUN apt-get update && \
+    apt-get -y --no-install-recommends install ca-certificates cmake make git gcc g++ libbz2-dev libxml2-dev wget ccache \
+    libzip-dev libboost1.74-all-dev lua5.4 liblua5.4-dev -o APT::Install-Suggests=0 -o APT::Install-Recommends=0
+
+RUN NPROC=${BUILD_CONCURRENCY:-$(nproc)} && \
+    ldconfig /usr/local/lib && \
+    git clone --branch v2021.3.0 --single-branch https://github.com/oneapi-src/oneTBB.git && \
+    cd oneTBB && \
+    mkdir build && \
+    cd build && \
+    cmake -DTBB_TEST=OFF -DCMAKE_BUILD_TYPE=Release ..  && \
+    cmake --build . && \
+    cmake --install .
+
+RUN ccache --max-size=256M
+
+WORKDIR /mnt/src
+
+EXPOSE 5000
