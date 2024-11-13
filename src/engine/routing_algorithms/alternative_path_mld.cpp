@@ -34,11 +34,16 @@ using Facade = DataFacade<Algorithm>;
 namespace
 {
 
+/// BKS customized values to enable higher probability of alternative suggestions
+/// that match what our users expect. This is tuned differently than car routes
+/// since we'll often times have short routes.
+///
+/// Originally inspired from: https://github.com/Project-OSRM/osrm-backend/issues/5663
 struct Parameters
 {
     // Alternative paths candidate via nodes are taken from overlapping search spaces.
     // Overlapping by a third guarantees us taking candidate nodes "from the middle".
-    double kSearchSpaceOverlapFactor = 1.33;
+    double kSearchSpaceOverlapFactor = 1.8;
     // Unpack n-times more candidate paths to run high-quality checks on.
     // Unpacking paths yields higher chance to find good alternatives but is also expensive.
     unsigned kAlternativesToUnpackFactor = 2;
@@ -141,10 +146,20 @@ Parameters parametersFromRequest(const PhantomEndpointCandidates &endpoint_candi
         candidatesSnappedLocation(endpoint_candidates.source_phantoms),
         candidatesSnappedLocation(endpoint_candidates.target_phantoms));
 
-    // 10km
-    if (distance < 10000.)
+    // 5km
+    if (distance < 5000.)
     {
         parameters.kAlternativesToUnpackFactor = 10.0;
+        parameters.kAtMostLongerBy = 1.0;
+        parameters.kCellsAtMostSameBy = 1.0;
+        parameters.kAtLeastOptimalAroundViaBy = 0.2;
+        parameters.kAtMostSameBy = 0.50;
+    }
+    // 10km
+    else if (distance < 10000.)
+    {
+        parameters.kAlternativesToUnpackFactor = 10.0;
+        parameters.kAtMostLongerBy = 0.5;
         parameters.kCellsAtMostSameBy = 1.0;
         parameters.kAtLeastOptimalAroundViaBy = 0.2;
         parameters.kAtMostSameBy = 0.50;
