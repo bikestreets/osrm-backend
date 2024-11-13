@@ -15,7 +15,9 @@ RUN NPROC=${BUILD_CONCURRENCY:-$(nproc)} && \
     cd build && \
     cmake -DTBB_TEST=OFF -DCMAKE_BUILD_TYPE=Release ..  && \
     cmake --build . && \
-    cmake --install .
+    cmake --install . && \
+    # add /usr/local/lib to ldconfig to allow loading libraries from there
+    ldconfig /usr/local/lib
 
 RUN ccache --max-size=256M
 
