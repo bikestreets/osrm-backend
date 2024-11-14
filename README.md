@@ -2,8 +2,8 @@
 
 Start the development environment to iterate on the OSRM code:
 ```
-$ ./start_dev_env.sh
-$ cd /mnt/src && ./bks/start_osrm.sh
+$ ./bks/start_dev_env.sh
+$ ./bks/start_osrm.sh
 ```
 
 ## Open Source Routing Machine
