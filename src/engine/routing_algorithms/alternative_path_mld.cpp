@@ -149,7 +149,7 @@ Parameters parametersFromRequest(const PhantomEndpointCandidates &endpoint_candi
     // 5km
     if (distance < 5000.)
     {
-        parameters.kAlternativesToUnpackFactor = 10.0;
+        parameters.kAlternativesToUnpackFactor = 20.0;
         parameters.kAtMostLongerBy = 1.0;
         parameters.kCellsAtMostSameBy = 1.0;
         parameters.kAtLeastOptimalAroundViaBy = 0.2;
