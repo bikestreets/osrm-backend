@@ -136,7 +136,8 @@ function Debug.process_way(way,result)
   Debug:reset_tag_fetch_counts()
   
    -- call the way processsing function
-  Debug.functions.process_way(Debug.profile,way,result)
+  return_value = Debug.functions.process_way(Debug.profile,way,result)
+  return return_value
 end
 
 return Debug
