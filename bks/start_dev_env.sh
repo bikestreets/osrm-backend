@@ -7,8 +7,8 @@
 
 set -e
 
-if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 <path to routing repo>"
+if [ "$#" -ne 3 ]; then
+  echo "Usage: $0 <path to routing repo> <data|staging_data> <port>"
   exit 1
 fi
 
@@ -19,7 +19,7 @@ docker build . -t $DOCKER_TAG -f docker/Dockerfile-dev
 docker run --rm -it \
   -v $(pwd):/mnt/src \
   -e CCACHE_DIR=/mnt/src/.ccache \
-  -v $1/osrm/data:/data \
-  -p 5004:5000 \
+  -v $1/osrm/$2:/data \
+  -p $3:5000 \
   --entrypoint "bash" \
   $DOCKER_TAG:latest
