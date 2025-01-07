@@ -43,7 +43,7 @@ struct Parameters
 {
     // Alternative paths candidate via nodes are taken from overlapping search spaces.
     // Overlapping by a third guarantees us taking candidate nodes "from the middle".
-    double kSearchSpaceOverlapFactor = 1.8;
+    double kSearchSpaceOverlapFactor = 1.5;
     // Unpack n-times more candidate paths to run high-quality checks on.
     // Unpacking paths yields higher chance to find good alternatives but is also expensive.
     unsigned kAlternativesToUnpackFactor = 2;
@@ -152,7 +152,7 @@ Parameters parametersFromRequest(const PhantomEndpointCandidates &endpoint_candi
         parameters.kAlternativesToUnpackFactor = 20.0;
         parameters.kAtMostLongerBy = 1.0;
         parameters.kCellsAtMostSameBy = 1.0;
-        parameters.kAtLeastOptimalAroundViaBy = 0.2;
+        parameters.kAtLeastOptimalAroundViaBy = 0.25;
         parameters.kAtMostSameBy = 0.50;
     }
     // 10km
