@@ -1,3 +1,11 @@
+## Bike Streets Info
+
+Start the development environment to iterate on the OSRM code:
+```
+$ ./bks/start_dev_env.sh
+$ ./bks/start_osrm.sh
+```
+
 ## Open Source Routing Machine
 
 [![osrm-backend CI](https://github.com/Project-OSRM/osrm-backend/actions/workflows/osrm-backend.yml/badge.svg)](https://github.com/Project-OSRM/osrm-backend/actions/workflows/osrm-backend.yml) [![Discord](https://img.shields.io/discord/1034487840219860992)](https://discord.gg/es9CdcCXcb)

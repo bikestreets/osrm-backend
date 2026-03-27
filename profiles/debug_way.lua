@@ -36,9 +36,15 @@ end
 
 -- call the way function
 local result = {}
-Debug.process_way(way,result)
+return_value = Debug.process_way(way,result)
 
 -- print input and output
 pprint(way)
 print("=>")
 pprint(result)
+print("\nEnabled?")
+if return_value ~= nil then
+  pprint(return_value)
+else
+  print("true")
+end
