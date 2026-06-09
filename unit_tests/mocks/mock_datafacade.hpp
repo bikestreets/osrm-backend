@@ -148,6 +148,8 @@ class MockBaseDataFacade : public engine::datafacade::BaseDataFacade
         return extractor::BikeStreetsType::None;
     }
 
+    bool GetNameIsProper(const NodeID /*id*/) const override final { return false; }
+
     std::vector<std::string> GetClasses(const extractor::ClassData /*data*/) const override final
     {
         return {};

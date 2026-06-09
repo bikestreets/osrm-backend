@@ -45,6 +45,9 @@ struct LegGeometry
 
         // Bike Streets per-edge classification for this segment.
         extractor::BikeStreetsType bikestreets;
+
+        // True when this segment's way has a proper original OSM name.
+        bool name_is_proper;
     };
     std::vector<Annotation> annotations;
 

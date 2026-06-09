@@ -485,6 +485,9 @@ void Sol2ScriptingEnvironment::InitContext(LuaScriptingContext &context)
                       { return bikeStreetsTypeToString(way.bikestreets); },
                       [](ExtractionWay &way, const char *value)
                       { way.bikestreets = bikeStreetsTypeFromString(value); }),
+        "name_is_proper",
+        sol::property([](const ExtractionWay &way) { return way.name_is_proper; },
+                      [](ExtractionWay &way, bool flag) { way.name_is_proper = flag; }),
         "highway_turn_classification",
         sol::property([](const ExtractionWay &way) { return way.highway_turn_classification; },
                       [](ExtractionWay &way, int flag) { way.highway_turn_classification = flag; }),

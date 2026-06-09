@@ -403,12 +403,15 @@ void ExtractorCallbacks::ProcessWay(const osmium::Way &input_way, const Extracti
         // bikestreets is initialized to None in the braced initializer and set to its real value
         // afterwards: GCC rejects initializing a narrow bit-field with a *runtime* scoped-enum
         // value in a brace-init-list (treated as narrowing), while a constant that fits is allowed.
+        // name_is_proper is a plain bool (0/1 always fits 1 bit, so no narrowing) and
+        // can stay in the braced initializer, unlike the scoped-enum bikestreets below.
         NodeBasedEdgeAnnotation forward_annotation{forward_name_id,
                                                    turn_lane_id_forward,
                                                    forward_classes,
                                                    parsed_way.forward_travel_mode,
                                                    parsed_way.is_left_hand_driving,
-                                                   BikeStreetsType::None};
+                                                   BikeStreetsType::None,
+                                                   parsed_way.name_is_proper};
         forward_annotation.bikestreets = parsed_way.bikestreets;
         external_memory.all_edges_annotation_data_list.push_back(forward_annotation);
         util::for_each_pair(nodes,
@@ -447,7 +450,8 @@ void ExtractorCallbacks::ProcessWay(const osmium::Way &input_way, const Extracti
                                                     backward_classes,
                                                     parsed_way.backward_travel_mode,
                                                     parsed_way.is_left_hand_driving,
-                                                    BikeStreetsType::None};
+                                                    BikeStreetsType::None,
+                                                    parsed_way.name_is_proper};
         backward_annotation.bikestreets = parsed_way.bikestreets;
         external_memory.all_edges_annotation_data_list.push_back(backward_annotation);
         util::for_each_pair(nodes,

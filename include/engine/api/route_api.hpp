@@ -845,6 +845,15 @@ class RouteAPI : public BaseAPI
                                            return static_cast<std::uint8_t>(anno.bikestreets);
                                        }));
                 }
+                if (requested_annotations & RouteParameters::AnnotationsType::NameIsProper)
+                {
+                    annotation.values.emplace(
+                        "name_is_proper",
+                        GetAnnotations(leg_geometry,
+                                       [](const guidance::LegGeometry::Annotation &anno) {
+                                           return static_cast<std::uint8_t>(anno.name_is_proper);
+                                       }));
+                }
                 if (requested_annotations & RouteParameters::AnnotationsType::Nodes)
                 {
                     util::json::Array nodes;

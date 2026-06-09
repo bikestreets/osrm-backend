@@ -64,6 +64,7 @@ struct ExtractionWay
         highway_turn_classification = 0;
         access_turn_classification = 0;
         bikestreets = BikeStreetsType::None;
+        name_is_proper = false;
     }
 
     // wrappers to allow assigning nil (nullptr) to string values
@@ -131,6 +132,10 @@ struct ExtractionWay
 
     // Bike Streets per-edge classification, surfaced as the `bikestreets` annotation.
     BikeStreetsType bikestreets;
+
+    // True when the way's original OSM name is a "proper" name (vs. a generated
+    // type label); surfaced as the `name_is_proper` annotation.
+    bool name_is_proper;
 };
 } // namespace osrm::extractor
 

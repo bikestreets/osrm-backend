@@ -74,7 +74,8 @@ struct RouteParametersGrammar : public BaseParametersGrammar<Iterator, Signature
                                                                     AnnotationsType::Nodes)(
             "distance", AnnotationsType::Distance)("weight", AnnotationsType::Weight)(
             "datasources", AnnotationsType::Datasources)("speed", AnnotationsType::Speed)(
-            "bikestreets", AnnotationsType::Bikestreets);
+            "bikestreets", AnnotationsType::Bikestreets)("name_is_proper",
+                                                         AnnotationsType::NameIsProper);
 
         waypoints_rule =
             qi::lit("waypoints=") >

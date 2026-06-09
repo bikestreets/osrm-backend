@@ -71,16 +71,28 @@ struct NodeBasedEdgeAnnotation
     ClassData classes;                     // 8  1
     TravelMode travel_mode : 4;            // 4
     bool is_left_hand_driving : 1;         // 1
-    BikeStreetsType bikestreets : 3;       // 3
+    // BikeStreetsType has 4 values (None/Street/Path/Sidewalk) so 2 bits suffice;
+    // the bit freed vs. the original :3 width is reused by name_is_proper below so
+    // the whole bit-field still fits one byte (no struct-size growth).
+    BikeStreetsType bikestreets : 2;       // 2
+    // True when this edge's way has a "proper" original OSM name (surfaced as the
+    // `name_is_proper` route annotation), letting the client tell a real street
+    // name apart from a generated type label.
+    bool name_is_proper : 1;               // 1
 
     bool CanCombineWith(const NodeBasedEdgeAnnotation &other) const
     {
-        return (std::tie(string_view_id, classes, travel_mode, is_left_hand_driving, bikestreets) ==
-                std::tie(other.string_view_id,
-                         other.classes,
-                         other.travel_mode,
-                         other.is_left_hand_driving,
-                         other.bikestreets));
+        return (std::tie(string_view_id,
+                         classes,
+                         travel_mode,
+                         is_left_hand_driving,
+                         bikestreets,
+                         name_is_proper) == std::tie(other.string_view_id,
+                                                     other.classes,
+                                                     other.travel_mode,
+                                                     other.is_left_hand_driving,
+                                                     other.bikestreets,
+                                                     other.name_is_proper));
     }
 
     bool operator<(const NodeBasedEdgeAnnotation &other) const
@@ -90,12 +102,14 @@ struct NodeBasedEdgeAnnotation
                          classes,
                          travel_mode,
                          is_left_hand_driving,
-                         bikestreets) < std::tie(other.string_view_id,
-                                                 other.lane_description_id,
-                                                 other.classes,
-                                                 other.travel_mode,
-                                                 other.is_left_hand_driving,
-                                                 other.bikestreets));
+                         bikestreets,
+                         name_is_proper) < std::tie(other.string_view_id,
+                                                    other.lane_description_id,
+                                                    other.classes,
+                                                    other.travel_mode,
+                                                    other.is_left_hand_driving,
+                                                    other.bikestreets,
+                                                    other.name_is_proper));
     }
 };
 

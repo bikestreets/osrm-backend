@@ -73,7 +73,9 @@ struct RouteParameters : public BaseParameters
         Datasources = 0x10,
         Speed = 0x20,
         Bikestreets = 0x40,
-        All = Duration | Nodes | Distance | Weight | Datasources | Speed | Bikestreets
+        NameIsProper = 0x80,
+        All = Duration | Nodes | Distance | Weight | Datasources | Speed | Bikestreets |
+              NameIsProper
     };
 
     RouteParameters() = default;

@@ -94,6 +94,11 @@ template <storage::Ownership Ownership> class EdgeBasedNodeDataContainerImpl
         return annotation_data[nodes[node_id].annotation_id].bikestreets;
     }
 
+    bool GetNameIsProper(const NodeID node_id) const
+    {
+        return annotation_data[nodes[node_id].annotation_id].name_is_proper;
+    }
+
     friend void serialization::read<Ownership>(storage::tar::FileReader &reader,
                                                const std::string &name,
                                                EdgeBasedNodeDataContainerImpl &ebn_data_container);

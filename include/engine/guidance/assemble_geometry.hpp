@@ -103,7 +103,8 @@ inline LegGeometry assembleGeometry(const datafacade::BaseDataFacade &facade,
                 from_alias<double>(path_point.weight_until_turn - path_point.weight_of_turn) /
                     facade.GetWeightMultiplier(),
                 path_point.datasource_id,
-                facade.GetBikeStreets(path_point.from_edge_based_node)});
+                facade.GetBikeStreets(path_point.from_edge_based_node),
+                facade.GetNameIsProper(path_point.from_edge_based_node)});
             geometry.locations.push_back(coordinate);
             geometry.node_ids.push_back(node_id);
         }
@@ -143,7 +144,8 @@ inline LegGeometry assembleGeometry(const datafacade::BaseDataFacade &facade,
                                     duration,
                                     weight,
                                     forward_datasources[target_node.fwd_segment_position],
-                                    facade.GetBikeStreets(target_node_id)});
+                                    facade.GetBikeStreets(target_node_id),
+                                    facade.GetNameIsProper(target_node_id)});
     }
     else
     {
@@ -156,7 +158,8 @@ inline LegGeometry assembleGeometry(const datafacade::BaseDataFacade &facade,
                                                : target_node.forward_weight) /
                 facade.GetWeightMultiplier(),
             forward_datasources[target_node.fwd_segment_position],
-            facade.GetBikeStreets(target_node_id)});
+            facade.GetBikeStreets(target_node_id),
+            facade.GetNameIsProper(target_node_id)});
     }
 
     geometry.segment_offsets.push_back(geometry.locations.size());
