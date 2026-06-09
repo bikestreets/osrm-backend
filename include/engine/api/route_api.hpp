@@ -836,6 +836,15 @@ class RouteAPI : public BaseAPI
                                        [](const guidance::LegGeometry::Annotation &anno)
                                        { return anno.datasource; }));
                 }
+                if (requested_annotations & RouteParameters::AnnotationsType::Bikestreets)
+                {
+                    annotation.values.emplace(
+                        "bikestreets",
+                        GetAnnotations(leg_geometry,
+                                       [](const guidance::LegGeometry::Annotation &anno) {
+                                           return static_cast<std::uint8_t>(anno.bikestreets);
+                                       }));
+                }
                 if (requested_annotations & RouteParameters::AnnotationsType::Nodes)
                 {
                     util::json::Array nodes;

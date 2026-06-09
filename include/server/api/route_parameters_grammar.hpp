@@ -73,7 +73,8 @@ struct RouteParametersGrammar : public BaseParametersGrammar<Iterator, Signature
         annotations_type.add("duration", AnnotationsType::Duration)("nodes",
                                                                     AnnotationsType::Nodes)(
             "distance", AnnotationsType::Distance)("weight", AnnotationsType::Weight)(
-            "datasources", AnnotationsType::Datasources)("speed", AnnotationsType::Speed);
+            "datasources", AnnotationsType::Datasources)("speed", AnnotationsType::Speed)(
+            "bikestreets", AnnotationsType::Bikestreets);
 
         waypoints_rule =
             qi::lit("waypoints=") >

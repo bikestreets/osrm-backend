@@ -8,6 +8,7 @@
 
 #include "contractor/query_edge.hpp"
 
+#include "extractor/bikestreets_type.hpp"
 #include "extractor/class_data.hpp"
 #include "extractor/edge_based_node_segment.hpp"
 #include "extractor/maneuver_override.hpp"
@@ -114,6 +115,8 @@ class BaseDataFacade
     virtual extractor::TravelMode GetTravelMode(const NodeID edge_based_node_id) const = 0;
 
     virtual extractor::ClassData GetClassData(const NodeID edge_based_node_id) const = 0;
+
+    virtual extractor::BikeStreetsType GetBikeStreets(const NodeID edge_based_node_id) const = 0;
 
     virtual bool ExcludeNode(const NodeID edge_based_node_id) const = 0;
 

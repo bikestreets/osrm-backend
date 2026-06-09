@@ -310,6 +310,10 @@ class ContiguousInternalMemoryDataFacade<routing_algorithms::offline::Algorithm>
     }
 
     osrm::extractor::ClassData GetClassData(const NodeID /*id*/) const override { return 0; }
+    osrm::extractor::BikeStreetsType GetBikeStreets(const NodeID /*id*/) const override
+    {
+        return osrm::extractor::BikeStreetsType::None;
+    }
     std::vector<std::string> GetClasses(const extractor::ClassData /*class_data*/) const override
     {
         return {};

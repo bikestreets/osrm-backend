@@ -1,6 +1,7 @@
 #ifndef ENGINE_GUIDANCE_LEG_GEOMETRY_HPP
 #define ENGINE_GUIDANCE_LEG_GEOMETRY_HPP
 
+#include "extractor/bikestreets_type.hpp"
 #include "util/coordinate.hpp"
 #include "util/integer_range.hpp"
 #include "util/typedefs.hpp"
@@ -41,6 +42,9 @@ struct LegGeometry
         double weight; // weight value, NOT including the turn weight
 
         DatasourceID datasource;
+
+        // Bike Streets per-edge classification for this segment.
+        extractor::BikeStreetsType bikestreets;
     };
     std::vector<Annotation> annotations;
 

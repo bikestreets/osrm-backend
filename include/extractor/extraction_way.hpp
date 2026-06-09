@@ -1,6 +1,7 @@
 #ifndef EXTRACTION_WAY_HPP
 #define EXTRACTION_WAY_HPP
 
+#include "extractor/bikestreets_type.hpp"
 #include "extractor/road_classification.hpp"
 #include "extractor/travel_mode.hpp"
 #include "util/guidance/turn_lanes.hpp"
@@ -62,6 +63,7 @@ struct ExtractionWay
         is_left_hand_driving = false;
         highway_turn_classification = 0;
         access_turn_classification = 0;
+        bikestreets = BikeStreetsType::None;
     }
 
     // wrappers to allow assigning nil (nullptr) to string values
@@ -126,6 +128,9 @@ struct ExtractionWay
     // user classifications for turn penalties
     std::uint8_t highway_turn_classification : 4;
     std::uint8_t access_turn_classification : 4;
+
+    // Bike Streets per-edge classification, surfaced as the `bikestreets` annotation.
+    BikeStreetsType bikestreets;
 };
 } // namespace osrm::extractor
 

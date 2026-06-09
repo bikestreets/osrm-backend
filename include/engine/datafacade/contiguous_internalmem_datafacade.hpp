@@ -431,6 +431,11 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
         return edge_based_node_data.GetClassData(edge_based_node_id);
     }
 
+    extractor::BikeStreetsType GetBikeStreets(const NodeID edge_based_node_id) const override final
+    {
+        return edge_based_node_data.GetBikeStreets(edge_based_node_id);
+    }
+
     bool ExcludeNode(const NodeID edge_based_node_id) const override final
     {
         return (edge_based_node_data.GetClassData(edge_based_node_id) & exclude_mask) > 0;

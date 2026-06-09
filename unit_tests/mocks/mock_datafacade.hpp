@@ -143,6 +143,11 @@ class MockBaseDataFacade : public engine::datafacade::BaseDataFacade
 
     extractor::ClassData GetClassData(const NodeID /*id*/) const override final { return 0; }
 
+    extractor::BikeStreetsType GetBikeStreets(const NodeID /*id*/) const override final
+    {
+        return extractor::BikeStreetsType::None;
+    }
+
     std::vector<std::string> GetClasses(const extractor::ClassData /*data*/) const override final
     {
         return {};

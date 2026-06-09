@@ -480,6 +480,11 @@ void Sol2ScriptingEnvironment::InitContext(LuaScriptingContext &context)
         "is_left_hand_driving",
         sol::property([](const ExtractionWay &way) { return way.is_left_hand_driving; },
                       [](ExtractionWay &way, bool flag) { way.is_left_hand_driving = flag; }),
+        "bikestreets",
+        sol::property([](const ExtractionWay &way)
+                      { return bikeStreetsTypeToString(way.bikestreets); },
+                      [](ExtractionWay &way, const char *value)
+                      { way.bikestreets = bikeStreetsTypeFromString(value); }),
         "highway_turn_classification",
         sol::property([](const ExtractionWay &way) { return way.highway_turn_classification; },
                       [](ExtractionWay &way, int flag) { way.highway_turn_classification = flag; }),

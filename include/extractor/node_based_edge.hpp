@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <tuple>
 
+#include "extractor/bikestreets_type.hpp"
 #include "extractor/class_data.hpp"
 #include "extractor/travel_mode.hpp"
 #include "util/typedefs.hpp"
@@ -70,26 +71,31 @@ struct NodeBasedEdgeAnnotation
     ClassData classes;                     // 8  1
     TravelMode travel_mode : 4;            // 4
     bool is_left_hand_driving : 1;         // 1
+    BikeStreetsType bikestreets : 3;       // 3
 
     bool CanCombineWith(const NodeBasedEdgeAnnotation &other) const
     {
-        return (std::tie(string_view_id, classes, travel_mode, is_left_hand_driving) ==
+        return (std::tie(string_view_id, classes, travel_mode, is_left_hand_driving, bikestreets) ==
                 std::tie(other.string_view_id,
                          other.classes,
                          other.travel_mode,
-                         other.is_left_hand_driving));
+                         other.is_left_hand_driving,
+                         other.bikestreets));
     }
 
     bool operator<(const NodeBasedEdgeAnnotation &other) const
     {
-        return (
-            std::tie(
-                string_view_id, lane_description_id, classes, travel_mode, is_left_hand_driving) <
-            std::tie(other.string_view_id,
-                     other.lane_description_id,
-                     other.classes,
-                     other.travel_mode,
-                     other.is_left_hand_driving));
+        return (std::tie(string_view_id,
+                         lane_description_id,
+                         classes,
+                         travel_mode,
+                         is_left_hand_driving,
+                         bikestreets) < std::tie(other.string_view_id,
+                                                 other.lane_description_id,
+                                                 other.classes,
+                                                 other.travel_mode,
+                                                 other.is_left_hand_driving,
+                                                 other.bikestreets));
     }
 };
 
