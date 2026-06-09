@@ -18,9 +18,13 @@ using Graph = util::NodeBasedDynamicGraph;
 
 BOOST_AUTO_TEST_CASE(simple_intersection_connectivity)
 {
+    // Each element names the type so it is direct-list-initialized: GCC rejects a scoped-enum
+    // bit-field (bikestreets) initialized via the nested copy-list-init of vector{ {...}, {...} }.
     std::vector<NodeBasedEdgeAnnotation> annotations{
-        {EMPTY_STRINGVIEWID, 0, INVALID_CLASS_DATA, TRAVEL_MODE_DRIVING, false},
-        {EMPTY_STRINGVIEWID, 1, INVALID_CLASS_DATA, TRAVEL_MODE_DRIVING, false}};
+        NodeBasedEdgeAnnotation{
+            EMPTY_STRINGVIEWID, 0, INVALID_CLASS_DATA, TRAVEL_MODE_DRIVING, false, BikeStreetsType::None},
+        NodeBasedEdgeAnnotation{
+            EMPTY_STRINGVIEWID, 1, INVALID_CLASS_DATA, TRAVEL_MODE_DRIVING, false, BikeStreetsType::None}};
     std::vector<TurnRestriction> restrictions{TurnRestriction{{ViaNodePath{0, 2, 1}}, false}};
     CompressedEdgeContainer container;
     test::MockScriptingEnvironment scripting_environment;

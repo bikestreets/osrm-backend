@@ -400,12 +400,17 @@ void ExtractorCallbacks::ProcessWay(const osmium::Way &input_way, const Extracti
     if (in_forward_direction)
     { // add (forward) segments or (forward,backward) for non-split edges in backward direction
         const auto annotation_data_id = external_memory.all_edges_annotation_data_list.size();
-        external_memory.all_edges_annotation_data_list.push_back({forward_name_id,
-                                                                  turn_lane_id_forward,
-                                                                  forward_classes,
-                                                                  parsed_way.forward_travel_mode,
-                                                                  parsed_way.is_left_hand_driving,
-                                                                  parsed_way.bikestreets});
+        // bikestreets is initialized to None in the braced initializer and set to its real value
+        // afterwards: GCC rejects initializing a narrow bit-field with a *runtime* scoped-enum
+        // value in a brace-init-list (treated as narrowing), while a constant that fits is allowed.
+        NodeBasedEdgeAnnotation forward_annotation{forward_name_id,
+                                                   turn_lane_id_forward,
+                                                   forward_classes,
+                                                   parsed_way.forward_travel_mode,
+                                                   parsed_way.is_left_hand_driving,
+                                                   BikeStreetsType::None};
+        forward_annotation.bikestreets = parsed_way.bikestreets;
+        external_memory.all_edges_annotation_data_list.push_back(forward_annotation);
         util::for_each_pair(nodes,
                             [&](const osmium::NodeRef &first_node, const osmium::NodeRef &last_node)
                             {
@@ -436,12 +441,15 @@ void ExtractorCallbacks::ProcessWay(const osmium::Way &input_way, const Extracti
     if (in_backward_direction && (!in_forward_direction || split_edge))
     { // add (backward) segments for split edges or not in forward direction
         const auto annotation_data_id = external_memory.all_edges_annotation_data_list.size();
-        external_memory.all_edges_annotation_data_list.push_back({backward_name_id,
-                                                                  turn_lane_id_backward,
-                                                                  backward_classes,
-                                                                  parsed_way.backward_travel_mode,
-                                                                  parsed_way.is_left_hand_driving,
-                                                                  parsed_way.bikestreets});
+        // See note above re: initializing bikestreets to None then assigning (GCC bit-field narrowing).
+        NodeBasedEdgeAnnotation backward_annotation{backward_name_id,
+                                                    turn_lane_id_backward,
+                                                    backward_classes,
+                                                    parsed_way.backward_travel_mode,
+                                                    parsed_way.is_left_hand_driving,
+                                                    BikeStreetsType::None};
+        backward_annotation.bikestreets = parsed_way.bikestreets;
+        external_memory.all_edges_annotation_data_list.push_back(backward_annotation);
         util::for_each_pair(nodes,
                             [&](const osmium::NodeRef &first_node, const osmium::NodeRef &last_node)
                             {
