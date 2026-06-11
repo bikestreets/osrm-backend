@@ -52,13 +52,16 @@ COPY --from=builder /opt /opt
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends --no-install-suggests \
+        ca-certificates \
+        curl \
         expat \
         libboost-date-time1.81.0 \
         libboost-iostreams1.81.0 \
         libboost-program-options1.81.0 \
         libboost-thread1.81.0 \
         liblua5.4-0 \
-        libtbb12 && \
+        libtbb12 \
+        zstd && \
     rm -rf /var/lib/apt/lists/* && \
 # Add /usr/local/lib to ldconfig to allow loading libraries from there
     ldconfig /usr/local/lib
