@@ -47,7 +47,12 @@ RUN NPROC=${BUILD_CONCURRENCY:-$(nproc)} && \
 # Only the content below ends up in the image, this helps remove /src from the image (which is large)
 FROM debian:bookworm-slim AS runstage
 
-COPY --from=builder /usr/local /usr/local
+# Copy only what the tools need at runtime. `make install` also puts the static
+# libosrm*.a archives (~160 MB), headers, a pkg-config file and an empty
+# python3.11 dir under /usr/local. The binaries link libosrm statically, so
+# those only serve something compiling against libosrm and just bloat the image.
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /usr/local/share/osrm /usr/local/share/osrm
 COPY --from=builder /opt /opt
 
 RUN apt-get update && \
@@ -62,9 +67,7 @@ RUN apt-get update && \
         liblua5.4-0 \
         libtbb12 \
         zstd && \
-    rm -rf /var/lib/apt/lists/* && \
-# Add /usr/local/lib to ldconfig to allow loading libraries from there
-    ldconfig /usr/local/lib
+    rm -rf /var/lib/apt/lists/*
 
 RUN /usr/local/bin/osrm-extract --help && \
     /usr/local/bin/osrm-routed --help && \
