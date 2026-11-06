@@ -72,6 +72,16 @@ class ScriptingEnvironment
 
     virtual bool HasLocationDependentData() const = 0;
 
+    // The profile's `properties.highway_turn_classification_variant`, or 0 when unset: the
+    // highway turn classification to evaluate every turn under as well (see
+    // `extractor/turn_class_variants.hpp`). Not part of ProfileProperties on purpose: that
+    // struct is written byte for byte to `.osrm.properties`, and a new member would change
+    // that file (and the layout every other tool reads) for every build, variants or not.
+    virtual int GetHighwayTurnClassificationVariant() { return 0; }
+    // The profile's `properties.turn_variants_label` ("" when unset), stored in
+    // `.osrm.turn_variants` so a reader can tie the file to the run that wrote it.
+    virtual std::string GetTurnVariantsLabel() { return {}; }
+
     ObstacleMap m_obstacle_map; // The obstacle map shared by all threads.
 };
 } // namespace extractor

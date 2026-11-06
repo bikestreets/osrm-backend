@@ -2,6 +2,7 @@
 #define RAW_ROUTE_DATA_H
 
 #include "extractor/class_data.hpp"
+#include "extractor/segment_annotations.hpp"
 #include "extractor/travel_mode.hpp"
 
 #include "guidance/turn_bearing.hpp"
@@ -43,6 +44,9 @@ struct PathData
     DatasourceID datasource_id;
     // If segment precedes a turn, ID of the turn itself
     std::optional<EdgeID> turn_edge;
+    // Bike Streets per-segment override of the bikestreets / name_is_proper annotations
+    // (extractor/segment_annotations.hpp); as built unless osrm-customize set one.
+    extractor::SegmentAnnotation segment_annotation = extractor::SEGMENT_ANNOTATION_AS_BUILT;
 };
 
 struct InternalRouteResult

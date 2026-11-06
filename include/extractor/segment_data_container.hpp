@@ -192,6 +192,11 @@ template <storage::Ownership Ownership> class SegmentDataContainerImpl
     }
 
     auto GetNumberOfGeometries() const { return index.size() - 1; }
+    // Offset of geometry `id` in the per-node vectors (nodes, datasources): segment p of it is
+    // forward entry `offset + 1 + p` and reverse entry `offset + p` (see Get*Datasources).
+    // Lets data kept outside this container (`.osrm.segment_annotations`) share the indexing.
+    auto GetGeometryOffset(const DirectionalGeometryID id) const { return index[id]; }
+    auto GetNumberOfNodeEntries() const { return nodes.size(); }
     auto GetNumberOfSegments() const { return fwd_weights.size(); }
 
     friend void

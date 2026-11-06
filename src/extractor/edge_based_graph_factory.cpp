@@ -6,6 +6,7 @@
 #include "extractor/scripting_environment.hpp"
 #include "extractor/serialization.hpp"
 #include "extractor/suffix_table.hpp"
+#include "extractor/turn_class_variants.hpp"
 
 #include "storage/io.hpp"
 
@@ -22,6 +23,7 @@
 #include <boost/numeric/conversion/cast.hpp>
 
 #include <algorithm>
+#include <filesystem>
 #include <limits>
 #include <string>
 #include <thread>
@@ -211,6 +213,7 @@ void EdgeBasedGraphFactory::Run(
     const std::string &turn_weight_penalties_filename,
     const std::string &turn_duration_penalties_filename,
     const std::string &turn_penalties_index_filename,
+    const std::string &turn_variants_filename,
     const std::string &cnbg_ebg_mapping_path,
     const std::string &conditional_penalties_filename,
     const std::string &maneuver_overrides_filename,
@@ -241,6 +244,7 @@ void EdgeBasedGraphFactory::Run(
                               turn_weight_penalties_filename,
                               turn_duration_penalties_filename,
                               turn_penalties_index_filename,
+                              turn_variants_filename,
                               conditional_penalties_filename,
                               maneuver_overrides_filename,
                               unconditional_node_restriction_map,
@@ -460,6 +464,7 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
     const std::string &turn_weight_penalties_filename,
     const std::string &turn_duration_penalties_filename,
     const std::string &turn_penalties_index_filename,
+    const std::string &turn_variants_filename,
     const std::string &conditional_penalties_filename,
     const std::string &maneuver_overrides_filename,
     const RestrictionMap &unconditional_node_restriction_map,
@@ -498,6 +503,10 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
     std::vector<TurnPenalty> turn_weight_penalties;
     std::vector<TurnPenalty> turn_duration_penalties;
     std::vector<lookup::TurnIndexBlock> turn_penalties_index;
+    // Filled only with a turn class variant (NUM_TURN_CLASS_VARIANTS entries per turn), so a
+    // build without one keeps its memory and outputs exactly as before.
+    std::vector<TurnPenalty> turn_variant_weights;
+    std::vector<TurnPenalty> turn_variant_durations;
 
     // Now, renumber all our maneuver overrides to use edge-based-nodes
     std::vector<StorageManeuverOverride> storage_maneuver_overrides;
@@ -505,6 +514,12 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
 
     const auto weight_multiplier =
         scripting_environment.GetProfileProperties().GetWeightMultiplier();
+    const auto variant_classification = scripting_environment.GetHighwayTurnClassificationVariant();
+    if (variant_classification != 0)
+    {
+        util::Log() << "Evaluating turns under highway turn classification variant "
+                    << variant_classification;
+    }
 
     // filled in during next stage, kept alive through following scope
     std::vector<Conditional> conditionals;
@@ -527,6 +542,19 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
             TurnPenalty turn_weight_penalty;
             TurnPenalty turn_duration_penalty;
         };
+        // With a turn class variant, each buffer's variants run parallel to its EdgeWithData
+        // (same order), in their own vectors so a build without one keeps EdgeWithData, and
+        // the extract's memory, exactly as before.
+        const auto transfer_variants = [&](const std::vector<TurnClassVariantPenalties> &variants)
+        {
+            for (const auto &turn : variants)
+            {
+                turn_variant_weights.insert(
+                    turn_variant_weights.end(), turn.weight.begin(), turn.weight.end());
+                turn_variant_durations.insert(
+                    turn_variant_durations.end(), turn.duration.begin(), turn.duration.end());
+            }
+        };
 
         auto const transfer_data = [&](const EdgeWithData &edge_with_data)
         {
@@ -542,6 +570,9 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
 
             std::vector<EdgeWithData> continuous_data; // may need this
             std::vector<EdgeWithData> delayed_data;    // may need this
+            // Filled only with a turn class variant, parallel to the two above.
+            std::vector<TurnClassVariantPenalties> continuous_variants;
+            std::vector<TurnClassVariantPenalties> delayed_variants;
             std::vector<Conditional> conditionals;
 
             std::unordered_multimap<NodeBasedTurn, std::pair<NodeID, NodeID>> turn_to_ebn_map;
@@ -586,7 +617,7 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
         // turn
         // Generate edges for either artificial nodes or the main graph
         const auto generate_edge =
-            [this, &scripting_environment, weight_multiplier](
+            [this, &scripting_environment, weight_multiplier, variant_classification](
                 // what nodes will be used? In most cases this will be the id
                 // stored in the edge_data. In case of duplicated nodes (e.g.
                 // due to via-way restrictions), one/both of these might
@@ -603,7 +634,9 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
                 const ExtractionTurnLeg &outgoing_road_leg,
                 const std::vector<ExtractionTurnLeg> &road_legs_on_the_right,
                 const std::vector<ExtractionTurnLeg> &road_legs_on_the_left,
-                const intersection::IntersectionEdgeGeometries &edge_geometries) -> EdgeWithData
+                const intersection::IntersectionEdgeGeometries &edge_geometries,
+                // receives the turn's class variants, only with a variant class
+                std::vector<TurnClassVariantPenalties> &variants_out) -> EdgeWithData
         {
             const auto &edge_data1 = m_node_based_graph.GetEdgeData(node_based_edge_from);
             const auto &edge_data2 = m_node_based_graph.GetEdgeData(node_based_edge_to);
@@ -669,10 +702,17 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
 
             // turn penalties are limited to [-2^15, 2^15) which roughly translates to 54 minutes
             // and fits signed 16bit deci-seconds
-            auto weight_penalty = TurnPenalty{boost::numeric_cast<TurnPenalty::value_type>(
-                extracted_turn.weight * weight_multiplier)};
-            auto duration_penalty = TurnPenalty{
-                boost::numeric_cast<TurnPenalty::value_type>(extracted_turn.duration * 10.)};
+            auto weight_penalty = toTurnWeightPenalty(extracted_turn, weight_multiplier);
+            auto duration_penalty = toTurnDurationPenalty(extracted_turn);
+
+            // After the as-built turn, so the profile sees it first exactly as without variants.
+            if (variant_classification != 0)
+            {
+                variants_out.push_back(evaluateTurnClassVariants(scripting_environment,
+                                                                 extracted_turn,
+                                                                 variant_classification,
+                                                                 weight_multiplier));
+            }
 
             BOOST_ASSERT(SPECIAL_NODEID != nbe_to_ebn_mapping[node_based_edge_from]);
             BOOST_ASSERT(SPECIAL_NODEID != nbe_to_ebn_mapping[node_based_edge_to]);
@@ -977,7 +1017,8 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
                                                   outgoing_road_leg,
                                                   road_legs_on_the_right,
                                                   road_legs_on_the_left,
-                                                  edge_geometries);
+                                                  edge_geometries,
+                                                  buffer->continuous_variants);
 
                                 buffer->continuous_data.push_back(edge_with_data);
 
@@ -1048,18 +1089,20 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
                                                 m_number_of_edge_based_nodes);
 
                                         // add into delayed data
-                                        auto edge_with_data = generate_edge(from_id,
-                                                                            via_target_id,
-                                                                            incoming_edge.node,
-                                                                            incoming_edge.edge,
-                                                                            outgoing_edge.node,
-                                                                            outgoing_edge.edge,
-                                                                            turn->angle,
-                                                                            incoming_road_leg,
-                                                                            outgoing_road_leg,
-                                                                            road_legs_on_the_right,
-                                                                            road_legs_on_the_left,
-                                                                            edge_geometries);
+                                        auto edge_with_data =
+                                            generate_edge(from_id,
+                                                          via_target_id,
+                                                          incoming_edge.node,
+                                                          incoming_edge.edge,
+                                                          outgoing_edge.node,
+                                                          outgoing_edge.edge,
+                                                          turn->angle,
+                                                          incoming_road_leg,
+                                                          outgoing_road_leg,
+                                                          road_legs_on_the_right,
+                                                          road_legs_on_the_left,
+                                                          edge_geometries,
+                                                          buffer->delayed_variants);
 
                                         buffer->delayed_data.push_back(edge_with_data);
 
@@ -1101,18 +1144,20 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
                                                 m_node_based_graph.GetTarget(outgoing_edge.edge),
                                                 m_number_of_edge_based_nodes);
 
-                                        auto edge_with_data = generate_edge(from_id,
-                                                                            via_target_id,
-                                                                            incoming_edge.node,
-                                                                            incoming_edge.edge,
-                                                                            outgoing_edge.node,
-                                                                            outgoing_edge.edge,
-                                                                            turn->angle,
-                                                                            incoming_road_leg,
-                                                                            outgoing_road_leg,
-                                                                            road_legs_on_the_right,
-                                                                            road_legs_on_the_left,
-                                                                            edge_geometries);
+                                        auto edge_with_data =
+                                            generate_edge(from_id,
+                                                          via_target_id,
+                                                          incoming_edge.node,
+                                                          incoming_edge.edge,
+                                                          outgoing_edge.node,
+                                                          outgoing_edge.edge,
+                                                          turn->angle,
+                                                          incoming_road_leg,
+                                                          outgoing_road_leg,
+                                                          road_legs_on_the_right,
+                                                          road_legs_on_the_left,
+                                                          edge_geometries,
+                                                          buffer->delayed_variants);
 
                                         buffer->delayed_data.push_back(edge_with_data);
 
@@ -1139,6 +1184,7 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
         util::UnbufferedLog log;
         util::Percent routing_progress(log, node_count);
         std::vector<EdgeWithData> delayed_data;
+        std::vector<TurnClassVariantPenalties> delayed_variants;
         tbb::filter<EdgesPipelineBufferPtr, void> output_stage(
             tbb::filter_mode::serial_in_order,
             [&](const auto &buffer)
@@ -1150,6 +1196,7 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
                 // Copy data from local buffers into global EBG data
                 std::for_each(
                     buffer->continuous_data.begin(), buffer->continuous_data.end(), transfer_data);
+                transfer_variants(buffer->continuous_variants);
                 conditionals.insert(
                     conditionals.end(), buffer->conditionals.begin(), buffer->conditionals.end());
 
@@ -1159,6 +1206,9 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
                 // Copy via-way restrictions delayed data
                 delayed_data.insert(
                     delayed_data.end(), buffer->delayed_data.begin(), buffer->delayed_data.end());
+                delayed_variants.insert(delayed_variants.end(),
+                                        buffer->delayed_variants.begin(),
+                                        buffer->delayed_variants.end());
 
                 std::for_each(buffer->turn_to_ebn_map.begin(),
                               buffer->turn_to_ebn_map.end(),
@@ -1179,6 +1229,7 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
 
         // NOTE: buffer.delayed_data and buffer.delayed_turn_data have the same index
         std::for_each(delayed_data.begin(), delayed_data.end(), transfer_data);
+        transfer_variants(delayed_variants);
 
         // Now, replace node-based-node ID values in the `node_sequence` with
         // the edge-based-node values we found and stored in the `turn_to_ebn_map`
@@ -1287,6 +1338,26 @@ void EdgeBasedGraphFactory::GenerateEdgeExpandedEdges(
     files::writeTurnWeightPenalty(turn_weight_penalties_filename, turn_weight_penalties);
     files::writeTurnDurationPenalty(turn_duration_penalties_filename, turn_duration_penalties);
     files::writeTurnPenaltiesIndex(turn_penalties_index_filename, turn_penalties_index);
+    if (variant_classification != 0)
+    {
+        BOOST_ASSERT(turn_variant_weights.size() ==
+                     NUM_TURN_CLASS_VARIANTS * turn_penalties_index.size());
+        BOOST_ASSERT(turn_variant_durations.size() == turn_variant_weights.size());
+        util::Log() << "Writing turn class variants for " << turn_penalties_index.size()
+                    << " turns...";
+        files::writeTurnClassVariants(turn_variants_filename,
+                                      variant_classification,
+                                      weight_multiplier,
+                                      scripting_environment.GetTurnVariantsLabel(),
+                                      turn_variant_weights,
+                                      turn_variant_durations);
+    }
+    else if (std::filesystem::remove(turn_variants_filename))
+    {
+        // A variants file left by an earlier build into the same path would no longer match
+        // this graph's turns, and a reader can't tell.
+        util::Log() << "Removed stale " << turn_variants_filename;
+    }
 
     util::Log() << "Generated " << m_edge_based_node_segments.size() << " edge based node segments";
     util::Log() << "Node-based graph contains " << node_based_edge_counter << " edges";

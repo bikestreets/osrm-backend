@@ -13,6 +13,7 @@
 #include "extractor/edge_based_node_segment.hpp"
 #include "extractor/maneuver_override.hpp"
 #include "extractor/query_node.hpp"
+#include "extractor/segment_annotations.hpp"
 #include "extractor/segment_data_container.hpp"
 #include "extractor/travel_mode.hpp"
 #include "extractor/turn_lane_types.hpp"
@@ -117,6 +118,18 @@ class BaseDataFacade
     virtual extractor::ClassData GetClassData(const NodeID edge_based_node_id) const = 0;
 
     virtual extractor::BikeStreetsType GetBikeStreets(const NodeID edge_based_node_id) const = 0;
+
+    // Per-segment override of the bikestreets / name_is_proper annotations (see
+    // extractor/segment_annotations.hpp) for segment `fwd_segment_position` of geometry `id`,
+    // travelled forward or in reverse. SEGMENT_ANNOTATION_AS_BUILT without overrides.
+    virtual extractor::SegmentAnnotation GetSegmentAnnotation(
+        const PackedGeometryID id, const std::size_t fwd_segment_position, const bool forward) const
+    {
+        (void)id;
+        (void)fwd_segment_position;
+        (void)forward;
+        return extractor::SEGMENT_ANNOTATION_AS_BUILT;
+    }
 
     virtual bool GetNameIsProper(const NodeID edge_based_node_id) const = 0;
 

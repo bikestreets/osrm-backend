@@ -188,9 +188,21 @@ void annotatePath(const FacadeT &facade,
     std::vector<SegmentWeight> weight_vector;
     std::vector<SegmentDuration> duration_vector;
     std::vector<DatasourceID> datasource_vector;
+    // Travel-order index -> segment annotation, for the geometry `get_segment_geometry` loaded.
+    PackedGeometryID annotation_geometry_id = SPECIAL_GEOMETRYID;
+    bool annotation_forward = true;
+    const auto segment_annotation = [&](const std::size_t segment_idx)
+    {
+        const auto fwd_segment_position =
+            annotation_forward ? segment_idx : weight_vector.size() - 1 - segment_idx;
+        return facade.GetSegmentAnnotation(
+            annotation_geometry_id, fwd_segment_position, annotation_forward);
+    };
 
     const auto get_segment_geometry = [&](const auto geometry_index)
     {
+        annotation_geometry_id = geometry_index.id;
+        annotation_forward = geometry_index.forward;
         const auto copy = [](auto &vector, const auto range)
         {
             vector.resize(range.size());
@@ -254,7 +266,8 @@ void annotatePath(const FacadeT &facade,
                                              alias_cast<EdgeDuration>(duration_vector[segment_idx]),
                                              {0},
                                              datasource_vector[segment_idx],
-                                             std::nullopt});
+                                             std::nullopt,
+                                             segment_annotation(segment_idx)});
         }
         BOOST_ASSERT(!unpacked_path.empty());
 
@@ -311,7 +324,8 @@ void annotatePath(const FacadeT &facade,
                      alias_cast<EdgeDuration>(duration_vector[segment_idx]),
                      {0},
                      datasource_vector[segment_idx],
-                     std::nullopt});
+                     std::nullopt,
+                     segment_annotation(segment_idx)});
     }
 
     if (!unpacked_path.empty())

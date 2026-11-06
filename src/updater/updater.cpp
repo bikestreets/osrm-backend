@@ -6,6 +6,7 @@
 #include "extractor/files.hpp"
 #include "extractor/packed_osm_ids.hpp"
 #include "extractor/restriction.hpp"
+#include "extractor/segment_annotations.hpp"
 #include "extractor/serialization.hpp"
 
 #include "guidance/files.hpp"
@@ -36,6 +37,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <iterator>
 #include <memory>
 #include <tuple>
@@ -529,6 +531,84 @@ updateConditionalTurns(std::vector<TurnPenalty> &turn_weight_penalties,
 }
 } // namespace
 
+namespace
+{
+// Writes `.osrm.segment_annotations` from `--segment-annotation-file` rows (see
+// extractor/segment_annotations.hpp), indexed like `segment_data`'s datasources. Node lists are
+// not changed by any update, so the segment data the updater already loaded is used as is.
+void updateSegmentAnnotations(const UpdaterConfig &config,
+                              const extractor::SegmentDataContainer &segment_data,
+                              const extractor::PackedOSMIDs &osm_node_ids)
+{
+    const auto path = config.GetPath(".osrm.segment_annotations");
+    TIMER_START(segment_annotations);
+    const auto lookup = csv::readSegmentAnnotations(config.segment_annotation_lookup_paths);
+
+    std::vector<extractor::SegmentAnnotation> forward(segment_data.GetNumberOfNodeEntries(),
+                                                      extractor::SEGMENT_ANNOTATION_AS_BUILT);
+    std::vector<extractor::SegmentAnnotation> reverse(forward.size(),
+                                                      extractor::SEGMENT_ANNOTATION_AS_BUILT);
+
+    const auto encode = [](const AnnotationSource &value)
+    {
+        return extractor::encodeSegmentAnnotation(
+            static_cast<extractor::BikeStreetsType>(value.bikestreets), value.name_is_proper != 0);
+    };
+
+    std::atomic<std::uint64_t> annotated{0};
+    using DirectionalGeometryID = extractor::SegmentDataContainer::DirectionalGeometryID;
+    tbb::parallel_for(
+        tbb::blocked_range<DirectionalGeometryID>(0, segment_data.GetNumberOfGeometries()),
+        [&](const auto &range)
+        {
+            std::uint64_t local = 0;
+            for (auto geometry_id = range.begin(); geometry_id < range.end(); ++geometry_id)
+            {
+                const auto nodes = segment_data.GetForwardGeometry(geometry_id);
+                const auto offset = segment_data.GetGeometryOffset(geometry_id);
+                for (const auto segment : util::irange<std::size_t>(0, nodes.size() - 1))
+                {
+                    const auto u = osm_node_ids[nodes[segment]];
+                    const auto v = osm_node_ids[nodes[segment + 1]];
+                    // Self-loops are artificial segments (obstacle nodes), as for speeds.
+                    if (u == v)
+                        continue;
+                    if (auto value = lookup({u, v}))
+                    {
+                        forward[offset + 1 + segment] = encode(*value);
+                        ++local;
+                    }
+                    if (auto value = lookup({v, u}))
+                    {
+                        reverse[offset + segment] = encode(*value);
+                        ++local;
+                    }
+                }
+            }
+            annotated += local;
+        });
+
+    // Remove first, so a path that is a symlink into another graph's directory (customizing a
+    // copy that links the base's static files) gets its own file instead of writing through.
+    std::filesystem::remove(path);
+    extractor::files::writeSegmentAnnotations(path, forward, reverse);
+    TIMER_STOP(segment_annotations);
+    util::Log() << "Annotated " << annotated << " directed segments from " << lookup.lookup.size()
+                << " rows in " << TIMER_MSEC(segment_annotations) << "ms.";
+}
+
+// osrm-customize without `--segment-annotation-file`: a file an earlier customize left would
+// describe a selection the new weights may no longer carry.
+void removeStaleSegmentAnnotations(const UpdaterConfig &config)
+{
+    const auto path = config.GetPath(".osrm.segment_annotations");
+    if (std::filesystem::remove(path))
+    {
+        util::Log() << "Removed stale " << path.string();
+    }
+}
+} // namespace
+
 EdgeID
 Updater::LoadAndUpdateEdgeExpandedGraph(std::vector<extractor::EdgeBasedEdge> &edge_based_edge_list,
                                         std::vector<EdgeWeight> &node_weights,
@@ -564,8 +644,16 @@ Updater::LoadAndUpdateEdgeExpandedGraph(std::vector<extractor::EdgeBasedEdge> &e
         !config.GetPath(".osrm.restrictions").empty() && config.valid_now;
     const bool update_edge_weights = !config.segment_speed_lookup_paths.empty();
     const bool update_turn_penalties = !config.turn_penalty_lookup_paths.empty();
+    // Only osrm-customize manages `.osrm.segment_annotations` (osrm-contract leaves it alone).
+    const bool update_segment_annotations =
+        config.manage_segment_annotations && !config.segment_annotation_lookup_paths.empty();
+    if (config.manage_segment_annotations && !update_segment_annotations)
+    {
+        removeStaleSegmentAnnotations(config);
+    }
 
-    if (!update_edge_weights && !update_turn_penalties && !update_conditional_turns)
+    if (!update_edge_weights && !update_turn_penalties && !update_conditional_turns &&
+        !update_segment_annotations)
     {
         saveDatasourcesNames(config);
         return number_of_edge_based_nodes;
@@ -580,7 +668,8 @@ Updater::LoadAndUpdateEdgeExpandedGraph(std::vector<extractor::EdgeBasedEdge> &e
     extractor::ProfileProperties profile_properties;
     std::vector<TurnPenalty> turn_weight_penalties;
     std::vector<TurnPenalty> turn_duration_penalties;
-    if (update_edge_weights || update_turn_penalties || update_conditional_turns)
+    if (update_edge_weights || update_turn_penalties || update_conditional_turns ||
+        update_segment_annotations)
     {
         tbb::parallel_invoke(
             [&]
@@ -602,6 +691,11 @@ Updater::LoadAndUpdateEdgeExpandedGraph(std::vector<extractor::EdgeBasedEdge> &e
                 extractor::files::readProfileProperties(config.GetPath(".osrm.properties"),
                                                         profile_properties);
             });
+    }
+
+    if (update_segment_annotations)
+    {
+        updateSegmentAnnotations(config, segment_data, osm_node_ids);
     }
 
     std::vector<extractor::ConditionalTurnPenalty> conditional_turns;

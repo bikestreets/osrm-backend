@@ -402,6 +402,77 @@ inline void writeTurnPenaltiesIndex(const std::filesystem::path &path,
     storage::serialization::write(writer, "/extractor/turn_index", turn_penalties_index);
 }
 
+// writes .osrm.turn_variants (see extractor/turn_class_variants.hpp). `weight` and `duration`
+// hold NUM_TURN_CLASS_VARIANTS penalties per turn, turn-major: entry 4 * turn_id + combination,
+// in the units of .osrm.turn_weight_penalties / .osrm.turn_duration_penalties. The variant class
+// and the weight multiplier are stored so a reader needs nothing else to convert them, and the
+// profile's `turn_variants_label` so it can tell which run wrote the file.
+template <typename TurnPenaltyT>
+inline void writeTurnClassVariants(const std::filesystem::path &path,
+                                   const std::int32_t highway_turn_classification,
+                                   const double weight_multiplier,
+                                   const std::string &label,
+                                   const TurnPenaltyT &weight,
+                                   const TurnPenaltyT &duration)
+{
+    const auto fingerprint = storage::tar::FileWriter::GenerateFingerprint;
+    storage::tar::FileWriter writer{path, fingerprint};
+
+    writer.WriteFrom("/extractor/turn_variants/highway_turn_classification",
+                     highway_turn_classification);
+    writer.WriteFrom("/extractor/turn_variants/weight_multiplier", weight_multiplier);
+    storage::serialization::write(writer, "/extractor/turn_variants/label", label);
+    storage::serialization::write(writer, "/extractor/turn_variants/weight", weight);
+    storage::serialization::write(writer, "/extractor/turn_variants/duration", duration);
+}
+
+// reads .osrm.turn_variants
+template <typename TurnPenaltyT>
+inline void readTurnClassVariants(const std::filesystem::path &path,
+                                  std::int32_t &highway_turn_classification,
+                                  double &weight_multiplier,
+                                  std::string &label,
+                                  TurnPenaltyT &weight,
+                                  TurnPenaltyT &duration)
+{
+    const auto fingerprint = storage::tar::FileReader::VerifyFingerprint;
+    storage::tar::FileReader reader{path, fingerprint};
+
+    reader.ReadInto("/extractor/turn_variants/highway_turn_classification",
+                    highway_turn_classification);
+    reader.ReadInto("/extractor/turn_variants/weight_multiplier", weight_multiplier);
+    storage::serialization::read(reader, "/extractor/turn_variants/label", label);
+    storage::serialization::read(reader, "/extractor/turn_variants/weight", weight);
+    storage::serialization::read(reader, "/extractor/turn_variants/duration", duration);
+}
+
+// writes .osrm.segment_annotations (see extractor/segment_annotations.hpp): one byte per entry
+// of the segment datasources, forward and reverse, indexed the same way.
+template <typename AnnotationVectorT>
+inline void writeSegmentAnnotations(const std::filesystem::path &path,
+                                    const AnnotationVectorT &forward,
+                                    const AnnotationVectorT &reverse)
+{
+    const auto fingerprint = storage::tar::FileWriter::GenerateFingerprint;
+    storage::tar::FileWriter writer{path, fingerprint};
+
+    storage::serialization::write(writer, "/common/segment_annotations/forward", forward);
+    storage::serialization::write(writer, "/common/segment_annotations/reverse", reverse);
+}
+
+// reads .osrm.segment_annotations
+template <typename AnnotationVectorT>
+inline void readSegmentAnnotations(const std::filesystem::path &path,
+                                   AnnotationVectorT &forward,
+                                   AnnotationVectorT &reverse)
+{
+    const auto fingerprint = storage::tar::FileReader::VerifyFingerprint;
+    storage::tar::FileReader reader{path, fingerprint};
+
+    storage::serialization::read(reader, "/common/segment_annotations/forward", forward);
+    storage::serialization::read(reader, "/common/segment_annotations/reverse", reverse);
+}
+
 // read .osrm.turn_penalties_index
 template <typename TurnIndexT>
 inline void readTurnPenaltiesIndex(const std::filesystem::path &path,

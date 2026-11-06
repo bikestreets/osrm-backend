@@ -52,7 +52,7 @@ struct UpdaterConfig final : storage::IOConfig
                     ".osrm.restrictions",
                     ".osrm.enw"},
                    {},
-                   {".osrm.datasource_names"}),
+                   {".osrm.datasource_names", ".osrm.segment_annotations"}),
           valid_now(0)
     {
     }
@@ -67,6 +67,12 @@ struct UpdaterConfig final : storage::IOConfig
 
     std::vector<std::string> segment_speed_lookup_paths;
     std::vector<std::string> turn_penalty_lookup_paths;
+    // Bike Streets: `from,to,bikestreets_code,name_is_proper` rows overriding the two per-edge
+    // annotations per segment (extractor/segment_annotations.hpp).
+    std::vector<std::string> segment_annotation_lookup_paths;
+    // Set by osrm-customize only: write `.osrm.segment_annotations` from the paths above, or
+    // remove a stale one without them. osrm-contract shares the updater and must not touch it.
+    bool manage_segment_annotations = false;
     std::string tz_file_path;
 };
 } // namespace osrm::updater
