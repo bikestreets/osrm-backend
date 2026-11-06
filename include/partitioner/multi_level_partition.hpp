@@ -154,7 +154,17 @@ template <storage::Ownership Ownership> class MultiLevelPartitionImpl final
         auto offsets = MakeLevelOffsets(lidx_to_num_cells);
         auto masks = MakeLevelMasks(offsets, num_level);
         auto bits = MakeBitToLevel(offsets, num_level);
-        return std::make_unique<LevelData>(LevelData{num_level, offsets, masks, bits, {{0}}});
+        // LevelData is written to .partition byte for byte, so its padding and the array slots
+        // past num_level must be zero. Built from a braced temporary they held whatever was on
+        // the stack, and two identical partitions wrote different files. make_unique
+        // value-initialises, which zeroes the padding too; the arrays are copied whole, so
+        // the functions below value-initialise them as well.
+        auto level_data = std::make_unique<LevelData>();
+        level_data->num_level = num_level;
+        level_data->lidx_to_offset = offsets;
+        level_data->lidx_to_mask = masks;
+        level_data->bit_to_level = bits;
+        return level_data;
     }
 
     inline std::size_t LevelIDToIndex(LevelID l) const { return l - 1; }
@@ -176,7 +186,7 @@ template <storage::Ownership Ownership> class MultiLevelPartitionImpl final
     // If we have N cells per level we need log_2 bits for every cell ID
     auto MakeLevelOffsets(const std::vector<std::uint32_t> &lidx_to_num_cells) const
     {
-        std::array<std::uint8_t, MAX_NUM_LEVEL - 1> offsets;
+        std::array<std::uint8_t, MAX_NUM_LEVEL - 1> offsets{};
 
         auto lidx = 0UL;
         auto sum_bits = 0;
@@ -204,7 +214,7 @@ template <storage::Ownership Ownership> class MultiLevelPartitionImpl final
     auto MakeLevelMasks(const std::array<std::uint8_t, MAX_NUM_LEVEL - 1> &level_offsets,
                         std::uint32_t num_level) const
     {
-        std::array<PartitionID, MAX_NUM_LEVEL - 1> masks;
+        std::array<PartitionID, MAX_NUM_LEVEL - 1> masks{};
 
         auto lidx = 0UL;
         util::for_each_pair(level_offsets.begin(),
@@ -233,7 +243,7 @@ template <storage::Ownership Ownership> class MultiLevelPartitionImpl final
     auto MakeBitToLevel(const std::array<std::uint8_t, MAX_NUM_LEVEL - 1> &level_offsets,
                         std::uint32_t num_level) const
     {
-        std::array<LevelID, NUM_PARTITION_BITS> bit_to_level;
+        std::array<LevelID, NUM_PARTITION_BITS> bit_to_level{};
 
         for (auto l = 1u; l < num_level; ++l)
         {

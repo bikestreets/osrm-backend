@@ -31,6 +31,7 @@
 #include <limits>
 #include <queue>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace osrm::util
@@ -206,9 +207,14 @@ class StaticRTree
         uint64_t m_hilbert_value;
         std::uint32_t m_original_index;
 
+        // The original index breaks ties: segments sharing a centroid (parallel ways, a
+        // segment and its overlapping twin) share a Hilbert value, and tbb::parallel_sort
+        // isn't stable, so without it their order in the leaves (.fileIndex) could vary run to
+        // run.
         inline bool operator<(const WrappedInputElement &other) const
         {
-            return m_hilbert_value < other.m_hilbert_value;
+            return std::tie(m_hilbert_value, m_original_index) <
+                   std::tie(other.m_hilbert_value, other.m_original_index);
         }
     };
 

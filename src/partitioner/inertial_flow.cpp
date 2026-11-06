@@ -3,11 +3,14 @@
 #include "partitioner/bisection_graph_view.hpp"
 #include "partitioner/reorder_first_last.hpp"
 
+#include <boost/assert.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <iterator>
 #include <mutex>
+#include <optional>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -113,10 +116,6 @@ DinicMaxFlow::MinCut bestMinCut(const BisectionGraphView &view,
 
     auto best_balance = 1;
 
-    std::mutex lock;
-
-    tbb::blocked_range<std::size_t> range{0, n, 1};
-
     const auto balance_delta = [&view](const auto num_nodes_source)
     {
         const std::int64_t difference =
@@ -124,7 +123,28 @@ DinicMaxFlow::MinCut bestMinCut(const BisectionGraphView &view,
         return std::abs(difference);
     };
 
-    tbb::parallel_for(range,
+    // The cuts are computed in parallel but folded into the best one in slope order, as a
+    // single thread does. Folding each as it finished let thread timing decide between cuts of
+    // equal quality (and the rule isn't a strict order, so the fold's order matters beyond
+    // ties): the same graph was bisected differently run to run. A cut that finishes before
+    // an earlier slope's waits in `finished` until it can be folded.
+    const auto fold = [&](DinicMaxFlow::MinCut &cut)
+    {
+        auto cut_balance = get_balance(cut.num_nodes_source);
+        if (cut.num_edges * cut_balance < best.num_edges * best_balance ||
+            (cut.num_edges == best.num_edges &&
+             balance_delta(cut.num_nodes_source) < balance_delta(best.num_nodes_source)))
+        {
+            best_balance = cut_balance;
+            std::swap(best, cut);
+        }
+    };
+
+    std::mutex lock;
+    std::vector<std::optional<DinicMaxFlow::MinCut>> finished(n);
+    std::size_t next_to_fold = 0;
+
+    tbb::parallel_for(tbb::blocked_range<std::size_t>{0, n, 1},
                       [&](const auto &chunk)
                       {
                           for (auto round = chunk.begin(), end = chunk.end(); round != end; ++round)
@@ -133,25 +153,18 @@ DinicMaxFlow::MinCut bestMinCut(const BisectionGraphView &view,
 
                               auto order = makeSpatialOrder(view, ratio, slope);
                               auto cut = DinicMaxFlow()(view, order.sources, order.sinks);
-                              auto cut_balance = get_balance(cut.num_nodes_source);
 
+                              std::lock_guard<std::mutex> guard{lock};
+                              finished[round] = std::move(cut);
+                              while (next_to_fold < n && finished[next_to_fold])
                               {
-                                  std::lock_guard<std::mutex> guard{lock};
-
-                                  // Swap to keep the destruction of the old object outside of
-                                  // critical section.
-                                  if (cut.num_edges * cut_balance < best.num_edges * best_balance ||
-                                      (cut.num_edges == best.num_edges &&
-                                       balance_delta(cut.num_nodes_source) <
-                                           balance_delta(best.num_nodes_source)))
-                                  {
-                                      best_balance = cut_balance;
-                                      std::swap(best, cut);
-                                  }
+                                  fold(*finished[next_to_fold]);
+                                  finished[next_to_fold].reset();
+                                  ++next_to_fold;
                               }
-                              // cut gets destroyed here
                           }
                       });
+    BOOST_ASSERT(next_to_fold == n);
 
     return best;
 }

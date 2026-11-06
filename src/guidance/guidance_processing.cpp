@@ -1,4 +1,5 @@
 #include "guidance/guidance_processing.hpp"
+#include "guidance/buffer_local_ids.hpp"
 #include "guidance/turn_analysis.hpp"
 #include "guidance/turn_lane_handler.hpp"
 
@@ -11,11 +12,13 @@
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_pipeline.h>
 
+#include <limits>
 #include <thread>
+#include <unordered_map>
+#include <vector>
 
 namespace osrm::guidance
 {
-
 void annotateTurns(const util::NodeBasedDynamicGraph &node_based_graph,
                    const extractor::EdgeBasedNodeDataContainer &edge_based_node_container,
                    const std::vector<util::Coordinate> &node_coordinates,
@@ -63,19 +66,36 @@ void annotateTurns(const util::NodeBasedDynamicGraph &node_based_graph,
                                                        node_restriction_map,
                                                        obstacle_nodes,
                                                        turn_lanes_data,
-                                                       lane_description_map,
-                                                       turn_analysis,
-                                                       lane_data_map);
+                                                       turn_analysis);
+
+    // The lane descriptions of the ways. The output stage adds the ones guidance combines for
+    // sliproads to lane_description_map while the guidance stage still runs, so that stage
+    // looks descriptions up in this copy instead.
+    const auto known_lane_descriptions = lane_description_map.data;
 
     bearing_class_by_node_based_node.resize(node_based_graph.GetNumberOfNodes(),
                                             std::numeric_limits<std::uint32_t>::max());
 
+    // See BufferLocalIDs for why these ids are buffer-local until the output stage.
     struct TurnsPipelineBuffer
     {
-        std::size_t nodes_processed = 0;
+        explicit TurnsPipelineBuffer(const lanes::BufferLaneIDs::KnownDescriptions &known)
+            : lane_ids(known)
+        {
+        }
 
+        std::size_t nodes_processed = 0;
+        NodeID first_node = 0;
+        NodeID end_node = 0;
+
+        // entry_class_id and lane_data_id hold buffer-local ids until the output stage
         std::vector<guidance::TurnData> continuous_turn_data; // populate answers from guidance
         std::vector<guidance::TurnData> delayed_turn_data;    // populate answers from guidance
+
+        BufferLocalIDs<util::guidance::EntryClass, EntryClassID> entry_classes;
+        // bearing_class_by_node_based_node holds buffer-local ids for this buffer's nodes
+        BufferLocalIDs<util::guidance::BearingClass, BearingClassID> bearing_classes;
+        lanes::BufferLaneIDs lane_ids;
 
         util::ConnectivityChecksum checksum;
     };
@@ -120,8 +140,10 @@ void annotateTurns(const util::NodeBasedDynamicGraph &node_based_graph,
             tbb::filter_mode::parallel,
             [&](const tbb::blocked_range<NodeID> &intersection_node_range)
             {
-                auto buffer = std::make_shared<TurnsPipelineBuffer>();
+                auto buffer = std::make_shared<TurnsPipelineBuffer>(known_lane_descriptions);
                 buffer->nodes_processed = intersection_node_range.size();
+                buffer->first_node = intersection_node_range.begin();
+                buffer->end_node = intersection_node_range.end();
 
                 for (auto intersection_node = intersection_node_range.begin(),
                           end = intersection_node_range.end();
@@ -184,8 +206,10 @@ void annotateTurns(const util::NodeBasedDynamicGraph &node_based_graph,
                             incoming_edge.node, incoming_edge.edge, intersection_view);
 
                         OSRM_ASSERT(intersection.valid(), node_coordinates[intersection_node]);
-                        intersection = turn_lane_handler.assignTurnLanes(
-                            incoming_edge.node, incoming_edge.edge, std::move(intersection));
+                        intersection = turn_lane_handler.assignTurnLanes(incoming_edge.node,
+                                                                         incoming_edge.edge,
+                                                                         std::move(intersection),
+                                                                         buffer->lane_ids);
 
                         // the entry class depends on the turn, so we have to classify the
                         // interesction for every edge
@@ -193,10 +217,10 @@ void annotateTurns(const util::NodeBasedDynamicGraph &node_based_graph,
                             classifyIntersection(intersection, node_coordinates[intersection_node]);
 
                         const auto entry_class_id =
-                            entry_class_hash.ConcurrentFindOrAdd(turn_classification.first);
+                            buffer->entry_classes.FindOrAdd(turn_classification.first);
 
                         const auto bearing_class_id =
-                            bearing_class_hash.ConcurrentFindOrAdd(turn_classification.second);
+                            buffer->bearing_classes.FindOrAdd(turn_classification.second);
 
                         // Note - this is strictly speaking not thread safe, but we know we
                         // should never be touching the same element twice, so we should
@@ -307,6 +331,18 @@ void annotateTurns(const util::NodeBasedDynamicGraph &node_based_graph,
         util::Percent guidance_progress(log, node_count);
         std::vector<guidance::TurnData> delayed_turn_data;
 
+        // Shared ids by buffer-local id (less its first id), reused across buffers.
+        std::vector<EntryClassID> entry_class_ids;
+        std::vector<BearingClassID> bearing_class_ids;
+        std::vector<LaneDescriptionID> lane_description_ids;
+        std::vector<LaneDataID> lane_data_ids;
+        const auto to_shared = [](const auto &local, auto &shared_map, auto &shared_ids)
+        {
+            shared_ids.clear();
+            for (const auto &key : local.Keys())
+                shared_ids.push_back(findOrAddSerially(shared_map, key));
+        };
+
         tbb::filter<TurnsPipelineBufferPtr, void> guidance_output_stage(
             tbb::filter_mode::serial_in_order,
             [&](const auto &buffer)
@@ -314,6 +350,42 @@ void annotateTurns(const util::NodeBasedDynamicGraph &node_based_graph,
                 guidance_progress.PrintAddition(buffer->nodes_processed);
 
                 connectivity_checksum = buffer->checksum.update_checksum(connectivity_checksum);
+
+                // Swap the buffer-local ids for shared ones, taking these in buffer order.
+                // Lane data keys contain a description id, so descriptions go first.
+                auto &lane_ids = buffer->lane_ids;
+                to_shared(lane_ids.descriptions, lane_description_map, lane_description_ids);
+                lane_data_ids.clear();
+                for (auto key : lane_ids.lane_data.Keys())
+                {
+                    if (lane_ids.descriptions.IsLocal(key.second))
+                        key.second = lane_description_ids[lane_ids.descriptions.Index(key.second)];
+                    lane_data_ids.push_back(findOrAddSerially(lane_data_map, key));
+                }
+                to_shared(buffer->entry_classes, entry_class_hash, entry_class_ids);
+                to_shared(buffer->bearing_classes, bearing_class_hash, bearing_class_ids);
+
+                const auto make_turn_shared = [&](guidance::TurnData &turn_data)
+                {
+                    turn_data.entry_class_id =
+                        entry_class_ids[buffer->entry_classes.Index(turn_data.entry_class_id)];
+                    if (lane_ids.lane_data.IsLocal(turn_data.lane_data_id))
+                        turn_data.lane_data_id =
+                            lane_data_ids[lane_ids.lane_data.Index(turn_data.lane_data_id)];
+                };
+                std::for_each(buffer->continuous_turn_data.begin(),
+                              buffer->continuous_turn_data.end(),
+                              make_turn_shared);
+                std::for_each(buffer->delayed_turn_data.begin(),
+                              buffer->delayed_turn_data.end(),
+                              make_turn_shared);
+                for (auto node = buffer->first_node; node < buffer->end_node; ++node)
+                {
+                    auto &bearing_class_id = bearing_class_by_node_based_node[node];
+                    if (bearing_class_id != std::numeric_limits<std::uint32_t>::max())
+                        bearing_class_id =
+                            bearing_class_ids[buffer->bearing_classes.Index(bearing_class_id)];
+                }
 
                 // Guidance data
                 std::for_each(buffer->continuous_turn_data.begin(),

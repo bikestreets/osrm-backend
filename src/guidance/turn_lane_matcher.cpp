@@ -191,7 +191,7 @@ Intersection triviallyMatchLanesToTurns(Intersection intersection,
                                         const LaneDataVector &lane_data,
                                         const util::NodeBasedDynamicGraph &node_based_graph,
                                         const LaneDescriptionID lane_string_id,
-                                        util::guidance::LaneDataIdMap &lane_data_to_id)
+                                        BufferLaneIDs &lane_ids)
 {
     std::size_t road_index = 1, lane = 0;
 
@@ -200,7 +200,7 @@ Intersection triviallyMatchLanesToTurns(Intersection intersection,
         util::guidance::LaneTupleIdPair key{{LaneID(data.to - data.from + 1), data.from},
                                             lane_string_id};
 
-        road.lane_data_id = lane_data_to_id.ConcurrentFindOrAdd(key);
+        road.lane_data_id = lane_ids.FindOrAddLaneData(key);
     };
 
     if (!lane_data.empty() && lane_data.front().tag == TurnLaneType::uturn)
