@@ -137,6 +137,45 @@ struct ExtractionTurn
     {
     }
 
+    // A copy of `turn` with only the source / target highway turn classifications replaced
+    // (including those of `source_road` and `target_road`, which describe the same two edges).
+    // Used to evaluate `process_turn` as if either side carried another classification, see
+    // `extractor/turn_class_variants.hpp`. The members are const, so this can't be an
+    // assignment on a copy. `angle` is copied as stored: the main constructor's `180 - angle`
+    // conversion has already been applied to it.
+    ExtractionTurn(const ExtractionTurn &turn,
+                   int source_highway_turn_classification,
+                   int target_highway_turn_classification)
+        : angle(turn.angle), number_of_roads(turn.number_of_roads), is_u_turn(turn.is_u_turn),
+          has_traffic_light(turn.has_traffic_light),
+          is_left_hand_driving(turn.is_left_hand_driving),
+
+          source_restricted(turn.source_restricted), source_mode(turn.source_mode),
+          source_is_motorway(turn.source_is_motorway), source_is_link(turn.source_is_link),
+          source_number_of_lanes(turn.source_number_of_lanes),
+          source_highway_turn_classification(source_highway_turn_classification),
+          source_access_turn_classification(turn.source_access_turn_classification),
+          source_speed(turn.source_speed), source_priority_class(turn.source_priority_class),
+
+          target_restricted(turn.target_restricted), target_mode(turn.target_mode),
+          target_is_motorway(turn.target_is_motorway), target_is_link(turn.target_is_link),
+          target_number_of_lanes(turn.target_number_of_lanes),
+          target_highway_turn_classification(target_highway_turn_classification),
+          target_access_turn_classification(turn.target_access_turn_classification),
+          target_speed(turn.target_speed), target_priority_class(turn.target_priority_class),
+
+          from(turn.from), via(turn.via), to(turn.to),
+
+          source_road(
+              withHighwayTurnClassification(turn.source_road, source_highway_turn_classification)),
+          target_road(
+              withHighwayTurnClassification(turn.target_road, target_highway_turn_classification)),
+          roads_on_the_right(turn.roads_on_the_right), roads_on_the_left(turn.roads_on_the_left),
+
+          weight(0.), duration(0.)
+    {
+    }
+
     // to construct a "fake" turn while compressing obstacle nodes
     // in graph_compressor.cpp
     ExtractionTurn(NodeID from,
@@ -222,6 +261,14 @@ struct ExtractionTurn
 
     double weight;
     double duration;
+
+  private:
+    static ExtractionTurnLeg withHighwayTurnClassification(ExtractionTurnLeg leg,
+                                                           int highway_turn_classification)
+    {
+        leg.highway_turn_classification = highway_turn_classification;
+        return leg;
+    }
 };
 } // namespace osrm::extractor
 

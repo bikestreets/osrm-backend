@@ -743,6 +743,24 @@ void Sol2ScriptingEnvironment::InitContext(LuaScriptingContext &context)
             sol::optional<bool> force_split_edges = properties["force_split_edges"];
             if (force_split_edges != sol::nullopt)
                 context.properties.force_split_edges = force_split_edges.value();
+
+            sol::optional<int> highway_turn_classification_variant =
+                properties["highway_turn_classification_variant"];
+            if (highway_turn_classification_variant != sol::nullopt)
+            {
+                // `highway_turn_classification` is a 4-bit edge flag; any other value could
+                // never be an edge's class, so it is a profile error, not "off".
+                if (*highway_turn_classification_variant < 0 ||
+                    *highway_turn_classification_variant > 15)
+                    throw util::exception(
+                        "highway_turn_classification_variant must be in [0, 15], got " +
+                        std::to_string(*highway_turn_classification_variant));
+                context.highway_turn_classification_variant = *highway_turn_classification_variant;
+            }
+
+            sol::optional<std::string> turn_variants_label = properties["turn_variants_label"];
+            if (turn_variants_label != sol::nullopt)
+                context.turn_variants_label = *turn_variants_label;
         }
     };
 
@@ -1023,6 +1041,16 @@ void Sol2ScriptingEnvironment::InitContext(LuaScriptingContext &context)
 const ProfileProperties &Sol2ScriptingEnvironment::GetProfileProperties()
 {
     return GetSol2Context().properties;
+}
+
+int Sol2ScriptingEnvironment::GetHighwayTurnClassificationVariant()
+{
+    return GetSol2Context().highway_turn_classification_variant;
+}
+
+std::string Sol2ScriptingEnvironment::GetTurnVariantsLabel()
+{
+    return GetSol2Context().turn_variants_label;
 }
 
 LuaScriptingContext &Sol2ScriptingEnvironment::GetSol2Context()

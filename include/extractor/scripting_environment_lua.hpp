@@ -52,6 +52,10 @@ struct LuaScriptingContext final
 
     int api_version = 4;
     sol::table profile_table;
+    // `properties.highway_turn_classification_variant`; 0 = off.
+    int highway_turn_classification_variant = 0;
+    // `properties.turn_variants_label`
+    std::string turn_variants_label;
 
     // Reference to immutable location dependent data and locations memo
     const LocationDependentData &location_dependent_data;
@@ -78,6 +82,8 @@ class Sol2ScriptingEnvironment final : public ScriptingEnvironment
     ~Sol2ScriptingEnvironment() override = default;
 
     const ProfileProperties &GetProfileProperties() override;
+    int GetHighwayTurnClassificationVariant() override;
+    std::string GetTurnVariantsLabel() override;
 
     std::vector<std::vector<std::string>> GetExcludableClasses() override;
     std::vector<std::string> GetNameSuffixList() override;

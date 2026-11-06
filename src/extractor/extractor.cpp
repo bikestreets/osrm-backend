@@ -753,6 +753,7 @@ EdgeID Extractor::BuildEdgeExpandedGraph(
                                      config.GetPath(".osrm.turn_weight_penalties").string(),
                                      config.GetPath(".osrm.turn_duration_penalties").string(),
                                      config.GetPath(".osrm.turn_penalties_index").string(),
+                                     config.GetPath(".osrm.turn_variants").string(),
                                      config.GetPath(".osrm.cnbg_to_ebg").string(),
                                      config.GetPath(".osrm.restrictions").string(),
                                      config.GetPath(".osrm.maneuver_overrides").string(),
