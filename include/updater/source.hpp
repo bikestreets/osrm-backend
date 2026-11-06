@@ -85,7 +85,16 @@ struct PenaltySource final
     std::uint8_t source;
 };
 
+struct AnnotationSource final
+{
+    AnnotationSource() : bikestreets(0), name_is_proper(0) {}
+    unsigned bikestreets;
+    unsigned name_is_proper;
+    std::uint8_t source;
+};
+
 using SegmentLookupTable = LookupTable<Segment, SpeedSource>;
+using SegmentAnnotationLookupTable = LookupTable<Segment, AnnotationSource>;
 using TurnLookupTable = LookupTable<Turn, PenaltySource>;
 } // namespace osrm::updater
 

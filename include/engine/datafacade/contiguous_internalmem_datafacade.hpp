@@ -166,6 +166,9 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
     util::vector_view<TurnPenalty> m_turn_weight_penalties;
     util::vector_view<TurnPenalty> m_turn_duration_penalties;
     extractor::SegmentDataView segment_data;
+    // Empty unless the graph has `.osrm.segment_annotations` (written by osrm-customize).
+    util::vector_view<extractor::SegmentAnnotation> m_segment_annotations_forward;
+    util::vector_view<extractor::SegmentAnnotation> m_segment_annotations_reverse;
     extractor::EdgeBasedNodeDataView edge_based_node_data;
     std::optional<osrm::guidance::TurnDataView> turn_data;
 
@@ -254,6 +257,27 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
 
         segment_data = make_segment_data_view(index, "/common/segment_data");
 
+        if (isIndexed(index, "/common/segment_annotations/forward"))
+        {
+            m_segment_annotations_forward = make_vector_view<extractor::SegmentAnnotation>(
+                index, "/common/segment_annotations/forward");
+            m_segment_annotations_reverse = make_vector_view<extractor::SegmentAnnotation>(
+                index, "/common/segment_annotations/reverse");
+            // One entry per segment-data node entry, like the datasources it is indexed by. Any
+            // other size is a file from another graph, and reading it would go out of bounds.
+            const auto expected = segment_data.GetNumberOfNodeEntries();
+            if (m_segment_annotations_forward.size() != expected ||
+                m_segment_annotations_reverse.size() != expected)
+            {
+                throw util::exception(".osrm.segment_annotations holds " +
+                                      std::to_string(m_segment_annotations_forward.size()) + " / " +
+                                      std::to_string(m_segment_annotations_reverse.size()) +
+                                      " entries, the geometry " + std::to_string(expected) +
+                                      ": it belongs to another graph; re-run osrm-customize. " +
+                                      SOURCE_REF);
+            }
+        }
+
         m_datasources = index.GetBlockPtr<extractor::Datasources>("/common/data_sources_names");
 
         if (isIndexed(index, "/common/intersection_bearings"))
@@ -335,6 +359,18 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
     GetUncompressedReverseDatasources(const PackedGeometryID id) const override final
     {
         return segment_data.GetReverseDatasources(id);
+    }
+
+    extractor::SegmentAnnotation GetSegmentAnnotation(const PackedGeometryID id,
+                                                      const std::size_t fwd_segment_position,
+                                                      const bool forward) const override final
+    {
+        if (m_segment_annotations_forward.empty())
+            return extractor::SEGMENT_ANNOTATION_AS_BUILT;
+        // Same indexing as the segment datasources (SegmentDataContainer::GetGeometryOffset).
+        const auto offset = segment_data.GetGeometryOffset(id);
+        return forward ? m_segment_annotations_forward[offset + 1 + fwd_segment_position]
+                       : m_segment_annotations_reverse[offset + fwd_segment_position];
     }
 
     TurnPenalty GetWeightPenaltyForEdgeID(const EdgeID edge_based_edge_id) const override final

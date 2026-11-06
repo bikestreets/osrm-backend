@@ -103,8 +103,12 @@ inline LegGeometry assembleGeometry(const datafacade::BaseDataFacade &facade,
                 from_alias<double>(path_point.weight_until_turn - path_point.weight_of_turn) /
                     facade.GetWeightMultiplier(),
                 path_point.datasource_id,
-                facade.GetBikeStreets(path_point.from_edge_based_node),
-                facade.GetNameIsProper(path_point.from_edge_based_node)});
+                extractor::segmentBikeStreets(
+                    path_point.segment_annotation,
+                    facade.GetBikeStreets(path_point.from_edge_based_node)),
+                extractor::segmentNameIsProper(
+                    path_point.segment_annotation,
+                    facade.GetNameIsProper(path_point.from_edge_based_node))});
             geometry.locations.push_back(coordinate);
             geometry.node_ids.push_back(node_id);
         }
@@ -119,6 +123,13 @@ inline LegGeometry assembleGeometry(const datafacade::BaseDataFacade &facade,
         reversed_target ? target_node.reverse_segment_id.id : target_node.forward_segment_id.id;
     const auto target_geometry_id = facade.GetGeometryIndex(target_node_id).id;
     const auto forward_datasources = facade.GetUncompressedForwardDatasources(target_geometry_id);
+    // The segment the target phantom sits on, in the direction it is travelled.
+    const auto target_annotation = facade.GetSegmentAnnotation(
+        target_geometry_id, target_node.fwd_segment_position, !reversed_target);
+    const auto target_bikestreets =
+        extractor::segmentBikeStreets(target_annotation, facade.GetBikeStreets(target_node_id));
+    const auto target_name_is_proper =
+        extractor::segmentNameIsProper(target_annotation, facade.GetNameIsProper(target_node_id));
 
     // This happens when the source/target are on the same edge-based-node
     // There will be no entries in the unpacked path, thus no annotations.
@@ -144,8 +155,8 @@ inline LegGeometry assembleGeometry(const datafacade::BaseDataFacade &facade,
                                     duration,
                                     weight,
                                     forward_datasources[target_node.fwd_segment_position],
-                                    facade.GetBikeStreets(target_node_id),
-                                    facade.GetNameIsProper(target_node_id)});
+                                    target_bikestreets,
+                                    target_name_is_proper});
     }
     else
     {
@@ -158,8 +169,8 @@ inline LegGeometry assembleGeometry(const datafacade::BaseDataFacade &facade,
                                                : target_node.forward_weight) /
                 facade.GetWeightMultiplier(),
             forward_datasources[target_node.fwd_segment_position],
-            facade.GetBikeStreets(target_node_id),
-            facade.GetNameIsProper(target_node_id)});
+            target_bikestreets,
+            target_name_is_proper});
     }
 
     geometry.segment_offsets.push_back(geometry.locations.size());

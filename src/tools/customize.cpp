@@ -52,13 +52,20 @@ return_code parseArguments(int argc,
                 &customization_config.updater_config.turn_penalty_lookup_paths)
                 ->composing(),
             "Lookup files containing from_, to_, via_nodes, and turn penalties to adjust turn "
-            "weights")("edge-weight-updates-over-factor",
-                       boost::program_options::value<double>(
-                           &customization_config.updater_config.log_edge_updates_factor)
-                           ->default_value(0.0),
-                       "Use with `--segment-speed-file`. Provide an `x` factor, by which Extractor "
-                       "will log edge "
-                       "weights updated by more than this factor")(
+            "weights")(
+            "segment-annotation-file",
+            boost::program_options::value<std::vector<std::string>>(
+                &customization_config.updater_config.segment_annotation_lookup_paths)
+                ->composing(),
+            "Lookup files containing nodeA, nodeB, bikestreets (0-3), name_is_proper (0/1) to "
+            "override those route annotations per segment (Bike Streets)")(
+            "edge-weight-updates-over-factor",
+            boost::program_options::value<double>(
+                &customization_config.updater_config.log_edge_updates_factor)
+                ->default_value(0.0),
+            "Use with `--segment-speed-file`. Provide an `x` factor, by which Extractor "
+            "will log edge "
+            "weights updated by more than this factor")(
             "parse-conditionals-from-now",
             boost::program_options::value<std::time_t>(
                 &customization_config.updater_config.valid_now)
@@ -165,6 +172,9 @@ try
 
     // set the default in/output names
     customization_config.UseDefaultOutputNames(customization_config.base_path);
+    // osrm-customize owns `.osrm.segment_annotations` (written from --segment-annotation-file,
+    // removed without it); osrm-contract runs the same updater and leaves it alone.
+    customization_config.updater_config.manage_segment_annotations = true;
 
     if (1 > customization_config.requested_num_threads)
     {

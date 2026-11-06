@@ -9,6 +9,7 @@
 #include "contractor/files.hpp"
 #include "customizer/files.hpp"
 #include "extractor/files.hpp"
+#include "extractor/segment_annotations.hpp"
 #include "guidance/files.hpp"
 #include "partitioner/files.hpp"
 
@@ -325,6 +326,7 @@ std::vector<std::pair<bool, std::filesystem::path>> Storage::GetUpdatableFiles()
         {IS_OPTIONAL, config.GetPath(".osrm.mldgr")},
         {IS_OPTIONAL, config.GetPath(".osrm.cell_metrics")},
         {IS_OPTIONAL, config.GetPath(".osrm.hsgr")},
+        {IS_OPTIONAL, config.GetPath(".osrm.segment_annotations")},
         {IS_REQUIRED, config.GetPath(".osrm.datasource_names")},
         {IS_REQUIRED, config.GetPath(".osrm.geometry")},
         {IS_REQUIRED, config.GetPath(".osrm.turn_weight_penalties")},
@@ -505,6 +507,17 @@ void Storage::PopulateUpdatableData(const SharedDataIndex &index)
     {
         auto segment_data = make_segment_data_view(index, "/common/segment_data");
         extractor::files::readSegmentData(config.GetPath(".osrm.geometry"), segment_data);
+    }
+
+    // Bike Streets per-segment annotation overrides, written by osrm-customize only
+    if (std::filesystem::exists(config.GetPath(".osrm.segment_annotations")))
+    {
+        auto forward = make_vector_view<extractor::SegmentAnnotation>(
+            index, "/common/segment_annotations/forward");
+        auto reverse = make_vector_view<extractor::SegmentAnnotation>(
+            index, "/common/segment_annotations/reverse");
+        extractor::files::readSegmentAnnotations(
+            config.GetPath(".osrm.segment_annotations"), forward, reverse);
     }
 
     {

@@ -16,6 +16,9 @@ BOOST_FUSION_ADAPT_STRUCT(osrm::updater::Turn,
                           (decltype(osrm::updater::Turn::from), from)
                           (decltype(osrm::updater::Turn::via), via)
                           (decltype(osrm::updater::Turn::to), to))
+BOOST_FUSION_ADAPT_STRUCT(osrm::updater::AnnotationSource,
+                          (decltype(osrm::updater::AnnotationSource::bikestreets), bikestreets)
+                          (decltype(osrm::updater::AnnotationSource::name_is_proper), name_is_proper))
 BOOST_FUSION_ADAPT_STRUCT(osrm::updater::PenaltySource,
                           (decltype(osrm::updater::PenaltySource::duration), duration)
                           (decltype(osrm::updater::PenaltySource::weight), weight))
@@ -58,5 +61,24 @@ TurnLookupTable readTurnValues(const std::vector<std::string> &paths)
                                                    qi::ulong_long,
                                                qi::double_ >> -(',' >> qi::double_));
     return parser(paths);
+}
+
+SegmentAnnotationLookupTable readSegmentAnnotations(const std::vector<std::string> &paths)
+{
+    CSVFilesParser<Segment, AnnotationSource> parser(
+        1, qi::ulong_long >> ',' >> qi::ulong_long, qi::uint_ >> ',' >> qi::uint_);
+    auto result = parser(paths);
+    // BikeStreetsType has 2 bits and name_is_proper 1; a wider value can't be stored, and
+    // truncating it would report another edge type than the file says.
+    for (const auto &entry : result.lookup)
+    {
+        if (entry.second.bikestreets > 3 || entry.second.name_is_proper > 1)
+        {
+            throw util::exception("Segment annotation " + std::to_string(entry.first.from) + "," +
+                                  std::to_string(entry.first.to) +
+                                  ": bikestreets must be 0-3 and name_is_proper 0 or 1");
+        }
+    }
+    return result;
 }
 } // namespace osrm::updater::csv

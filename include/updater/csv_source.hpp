@@ -7,6 +7,7 @@ namespace osrm::updater::csv
 {
 SegmentLookupTable readSegmentValues(const std::vector<std::string> &paths);
 TurnLookupTable readTurnValues(const std::vector<std::string> &paths);
+SegmentAnnotationLookupTable readSegmentAnnotations(const std::vector<std::string> &paths);
 } // namespace osrm::updater::csv
 
 #endif

@@ -47,6 +47,7 @@
 #include <tbb/parallel_pipeline.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <memory>
 #include <thread>
 #include <tuple>
@@ -300,6 +301,12 @@ int Extractor::run(ScriptingEnvironment &scripting_environment)
     // destroys internal containers
     files::writeSegmentData(config.GetPath(".osrm.geometry"),
                             *node_based_graph_factory.GetCompressedEdges().ToSegmentData());
+    // Per-segment annotation overrides (osrm-customize) are indexed by this geometry; one an
+    // earlier customize left would point into the old one.
+    if (std::filesystem::remove(config.GetPath(".osrm.segment_annotations")))
+    {
+        util::Log() << "Removed stale " << config.GetPath(".osrm.segment_annotations").string();
+    }
 
     util::Log() << "Saving edge-based node weights to file.";
     TIMER_START(timer_write_node_weights);
