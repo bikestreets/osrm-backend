@@ -17,7 +17,9 @@
 #include <boost/phoenix.hpp>
 #include <boost/spirit/include/qi.hpp>
 
+#include <algorithm>
 #include <filesystem>
+#include <iterator>
 #include <vector>
 
 namespace osrm::updater
@@ -50,6 +52,7 @@ template <typename Key, typename Value> struct CSVFilesParser
                               [&](const std::size_t idx)
                               {
                                   auto local = ParseCSVFile(csv_filenames[idx], start_index + idx);
+                                  KeepLastLinePerKey(local);
 
                                   { // Merge local CSV results into a flat global vector
                                       tbb::spin_mutex::scoped_lock _{mutex};
@@ -59,9 +62,11 @@ template <typename Key, typename Value> struct CSVFilesParser
                                   }
                               });
 
-            // With flattened map-ish view of all the files, make a stable sort on key and source
-            // and unique them on key to keep only the value with the largest file index
-            // and the largest line number in a file.
+            // With flattened map-ish view of all the files, sort on key and source and unique
+            // them on key to keep only the value with the largest file index. Each file holds
+            // a key at most once by now (`KeepLastLinePerKey`, its largest line number), so no
+            // two entries tie on (key, source) and the unstable parallel sort's result doesn't
+            // depend on scheduling, nor on the order the files' results were merged in above.
             // The operands order is swapped to make descending ordering on (key, source)
             tbb::parallel_sort(begin(lookup),
                                end(lookup),
@@ -92,6 +97,29 @@ template <typename Key, typename Value> struct CSVFilesParser
 
   private:
     // Parse a single CSV file and return result as a vector<Key, Value>
+    // A key repeated within one file: keep its last line. Lines are parsed in file order, and a
+    // stable sort keeps that order among equal keys, so the last of each run is the last line.
+    static void KeepLastLinePerKey(std::vector<std::pair<Key, Value>> &entries)
+    {
+        std::stable_sort(begin(entries),
+                         end(entries),
+                         [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
+        auto out = begin(entries);
+        for (auto run = begin(entries); run != end(entries);)
+        {
+            const auto next =
+                std::find_if(run,
+                             end(entries),
+                             [&run](const auto &entry) { return !(entry.first == run->first); });
+            const auto last = std::prev(next);
+            if (out != last)
+                *out = std::move(*last);
+            ++out;
+            run = next;
+        }
+        entries.erase(out, end(entries));
+    }
+
     auto ParseCSVFile(const std::string &filename, std::size_t file_id) const
     {
         namespace qi = boost::spirit::qi;

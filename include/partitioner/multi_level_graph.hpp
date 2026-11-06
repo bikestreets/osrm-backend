@@ -178,9 +178,28 @@ class MultiLevelGraph : public util::StaticGraph<EdgeDataT, Ownership>
             permutation.end(),
             [&edges, &highest_border_level](const auto &lhs, const auto &rhs)
             {
-                // sort by source node and then by level in ascending order
-                return std::tie(edges[lhs].source, highest_border_level[lhs], edges[lhs].target) <
-                       std::tie(edges[rhs].source, highest_border_level[rhs], edges[rhs].target);
+                // sort by source node and then by level in ascending order. After
+                // prepareEdgesForUsageInGraph a (source, target) has one merged edge, or a
+                // forward-only and a backward-only one, which tie on that key.
+                // tbb::parallel_sort isn't stable, so without a tie-break their order would
+                // depend on thread scheduling. Query unpacking takes the first matching edge, so a
+                // flipped pair changes the reported turn and weight of a route from one
+                // osrm-customize run to the next. Forward first, as prepareEdgesForUsageInGraph
+                // emits them; the input position only breaks a full tie, which deduplicated input
+                // doesn't have.
+                const auto &l = edges[lhs];
+                const auto &r = edges[rhs];
+                if (l.source != r.source)
+                    return l.source < r.source;
+                if (highest_border_level[lhs] != highest_border_level[rhs])
+                    return highest_border_level[lhs] < highest_border_level[rhs];
+                if (l.target != r.target)
+                    return l.target < r.target;
+                if (l.data.forward != r.data.forward)
+                    return l.data.forward > r.data.forward; // forward first
+                if (l.data.backward != r.data.backward)
+                    return l.data.backward < r.data.backward;
+                return lhs < rhs;
             });
 
         return permutation;
