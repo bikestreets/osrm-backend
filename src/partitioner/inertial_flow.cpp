@@ -114,7 +114,10 @@ DinicMaxFlow::MinCut bestMinCut(const BisectionGraphView &view,
             return 1.0;
     };
 
-    auto best_balance = 1;
+    // A double, as get_balance returns. As an int it truncated the best cut's imbalance
+    // factor (1.5 became 1), so the best cut scored better than it was and a later, truly
+    // better cut could fail to replace it.
+    double best_balance = 1.0;
 
     const auto balance_delta = [&view](const auto num_nodes_source)
     {
