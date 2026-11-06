@@ -1,11 +1,17 @@
 #include "partitioner/multi_level_graph.hpp"
+#include "partitioner/edge_based_graph_reader.hpp"
 #include "util/typedefs.hpp"
 
 #include "../common/range_tools.hpp"
 
 #include <boost/test/unit_test.hpp>
 
+#include <tbb/info.h>
+#include <tbb/task_arena.h>
+
 #include <algorithm>
+#include <random>
+#include <tuple>
 #include <vector>
 
 using namespace osrm;
@@ -216,6 +222,131 @@ BOOST_AUTO_TEST_CASE(check_last_internal_edge)
     BOOST_CHECK_EQUAL(graph.GetInternalEdgeRange(0, 3).size(), 0);
     CHECK_EQUAL_COLLECTIONS(graph.GetInternalEdgeRange(1, 3), all_edges);
     CHECK_EQUAL_COLLECTIONS(graph.GetInternalEdgeRange(2, 3), all_edges);
+}
+
+BOOST_AUTO_TEST_CASE(forward_and_backward_parallel_edges_keep_one_order_at_any_thread_count)
+{
+    // After prepareEdgesForUsageInGraph a (source, target) holds one merged edge, or a
+    // forward-only and a backward-only one, which tie on the graph's sort key (source, level,
+    // target). Query unpacking takes the first matching edge, so their order must not depend
+    // on thread scheduling.
+    if (tbb::info::default_concurrency() < 2)
+    {
+        BOOST_TEST_MESSAGE("one core: a parallel sort can't be exercised here");
+        return;
+    }
+    using Edge = MultiLevelEdgeBasedGraph::InputEdge;
+
+    const std::uint32_t num_nodes = 2000;
+    std::vector<CellID> l1(num_nodes), l2(num_nodes);
+    for (std::uint32_t node = 0; node < num_nodes; ++node)
+    {
+        l1[node] = node % 8;
+        l2[node] = node % 2;
+    }
+    MultiLevelPartition mlp{{l1, l2}, {8, 2}};
+
+    // For each (s, t): s -> t forward-only, and t -> s forward-only with another weight, whose
+    // split gives (s, t) a backward-only edge, so preparation keeps both. The steps make the
+    // border level fall as the target id rises (+1: cells differ on both levels, +2: on level 1
+    // only, +8: on neither), so the input is NOT already in sort order: tbb::parallel_sort
+    // returns early on sorted input, which would hide an unstable order.
+    std::vector<extractor::EdgeBasedEdge> edge_based_edges;
+    NodeID turn = 0;
+    for (std::uint32_t source = 0; source < num_nodes; ++source)
+        for (std::uint32_t step : {1u, 2u, 8u})
+        {
+            const auto target = (source + step) % num_nodes;
+            edge_based_edges.emplace_back(source,
+                                          target,
+                                          turn++,
+                                          EdgeWeight{10},
+                                          EdgeDuration{10},
+                                          EdgeDistance{1},
+                                          true,
+                                          false);
+            edge_based_edges.emplace_back(target,
+                                          source,
+                                          turn++,
+                                          EdgeWeight{20},
+                                          EdgeDuration{20},
+                                          EdgeDistance{1},
+                                          true,
+                                          false);
+        }
+    const auto edges = prepareEdgesForUsageInGraph<Edge>(splitBidirectionalEdges(edge_based_edges));
+
+    using Entry = std::tuple<NodeID, NodeID, NodeID, bool>; // source, target, turn, forward
+    const auto graph_order = [&](const int threads)
+    {
+        std::vector<Entry> order;
+        tbb::task_arena arena(threads);
+        arena.execute(
+            [&]
+            {
+                const MultiLevelEdgeBasedGraph graph(mlp, num_nodes, edges);
+                for (auto node : util::irange(0u, graph.GetNumberOfNodes()))
+                    for (auto edge : graph.GetAdjacentEdgeRange(node))
+                    {
+                        const auto &data = graph.GetEdgeData(edge);
+                        order.emplace_back(
+                            node, graph.GetTarget(edge), data.turn_id, data.forward != 0);
+                    }
+            });
+        return order;
+    };
+
+    const auto serial = graph_order(1);
+    std::size_t pairs = 0;
+    for (std::size_t i = 1; i < serial.size(); ++i)
+    {
+        const auto &[source, target, turn_id, forward] = serial[i];
+        const auto &[previous_source, previous_target, previous_turn, previous_forward] =
+            serial[i - 1];
+        if (source == previous_source && target == previous_target)
+        {
+            ++pairs;
+            BOOST_CHECK(previous_forward && !forward); // forward first
+        }
+    }
+    // Every (s, t) and (t, s) of every step holds a forward-only and a backward-only edge.
+    BOOST_CHECK_EQUAL(pairs, 6u * num_nodes);
+    for (int run = 0; run < 5; ++run)
+        BOOST_CHECK(graph_order(8) == serial);
+}
+
+BOOST_AUTO_TEST_CASE(a_weight_tie_keeps_the_same_parallel_edge_whatever_the_rest_of_the_graph)
+{
+    // Two forward edges 0 -> 1 with the same weight (different turns into the same edge-based
+    // node): preparation keeps one. Which one must be a function of their own data, not of
+    // where the other edges sit (which another speed file, or another sort, would change).
+    using Edge = MultiLevelEdgeBasedGraph::InputEdge;
+    std::vector<extractor::EdgeBasedEdge> edge_based_edges = {
+        {0, 1, 7, EdgeWeight{10}, EdgeDuration{12}, EdgeDistance{1}, true, false},
+        {0, 1, 3, EdgeWeight{10}, EdgeDuration{14}, EdgeDistance{1}, true, false}};
+    for (NodeID node = 2; node < 3000; ++node)
+        edge_based_edges.push_back({node,
+                                    node + 1,
+                                    node + 10,
+                                    EdgeWeight{static_cast<std::int32_t>(node % 5)},
+                                    EdgeDuration{1},
+                                    EdgeDistance{1},
+                                    true,
+                                    false});
+
+    std::mt19937 random(42);
+    for (int shuffle = 0; shuffle < 20; ++shuffle)
+    {
+        std::shuffle(edge_based_edges.begin(), edge_based_edges.end(), random);
+        const auto edges =
+            prepareEdgesForUsageInGraph<Edge>(splitBidirectionalEdges(edge_based_edges));
+        const auto kept =
+            std::find_if(edges.begin(),
+                         edges.end(),
+                         [](const auto &edge) { return edge.source == 0 && edge.target == 1; });
+        BOOST_REQUIRE(kept != edges.end());
+        BOOST_CHECK_EQUAL(kept->data.turn_id, 3u); // the lowest turn id, every time
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

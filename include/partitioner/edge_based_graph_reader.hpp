@@ -63,12 +63,34 @@ std::vector<OutputEdgeT> prepareEdgesForUsageInGraph(std::vector<extractor::Edge
     // sort into blocks of edges with same source + target
     // the we partition by the forward flag to sort all edges with a forward direction first.
     // the we sort by weight to ensure the first forward edge is the smallest forward edge
+    //
+    // The remaining fields break ties, so the order is total: of two parallel edges with the
+    // same weight (different turns into the same edge-based node), the one kept below is a
+    // function of their own data. std::sort isn't stable, so without this the survivor would
+    // depend on where every OTHER edge sits, i.e. on weights elsewhere in the graph (two
+    // customizes of one base with different speed files could keep different turns on a pair
+    // neither file touches) and on the standard library's sort.
+    // Field by field rather than as one tuple: this runs serially over every edge of the graph,
+    // and the tie-break fields are only read on a tie.
     std::sort(begin(edges),
               end(edges),
               [](const auto &lhs, const auto &rhs)
               {
-                  return std::tie(lhs.source, lhs.target, rhs.data.forward, lhs.data.weight) <
-                         std::tie(rhs.source, rhs.target, lhs.data.forward, rhs.data.weight);
+                  if (lhs.source != rhs.source)
+                      return lhs.source < rhs.source;
+                  if (lhs.target != rhs.target)
+                      return lhs.target < rhs.target;
+                  if (lhs.data.forward != rhs.data.forward)
+                      return lhs.data.forward > rhs.data.forward; // forward first
+                  if (lhs.data.weight != rhs.data.weight)
+                      return lhs.data.weight < rhs.data.weight;
+                  if (lhs.data.turn_id != rhs.data.turn_id)
+                      return lhs.data.turn_id < rhs.data.turn_id;
+                  if (lhs.data.duration != rhs.data.duration)
+                      return lhs.data.duration < rhs.data.duration;
+                  if (lhs.data.distance != rhs.data.distance)
+                      return lhs.data.distance < rhs.data.distance;
+                  return lhs.data.backward < rhs.data.backward;
               });
 
     std::vector<OutputEdgeT> output_edges;

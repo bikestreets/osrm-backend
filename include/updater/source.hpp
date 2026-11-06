@@ -3,6 +3,7 @@
 
 #include "util/typedefs.hpp"
 
+#include <algorithm>
 #include <optional>
 #include <tuple>
 #include <vector>
