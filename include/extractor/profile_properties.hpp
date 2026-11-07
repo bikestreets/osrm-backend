@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 
 namespace osrm::extractor
@@ -24,13 +25,24 @@ struct ProfileProperties
     static constexpr int MAX_CLASS_NAME_LENGTH = 255;
 
     ProfileProperties()
-        : traffic_signal_penalty(0), u_turn_penalty(0),
-          max_speed_for_map_matching(DEFAULT_MAX_SPEED), max_collapse_distance(30.0),
-          continue_straight_at_waypoint(true), use_turn_restrictions(false),
-          left_hand_driving(false), fallback_to_duration(true), weight_name{"duration"},
-          class_names{{}}, excludable_classes{{}}, call_tagless_node_function(true)
     {
+        // .properties stores this struct byte for byte, so its padding must be zero too, or
+        // the file depends on what the memory held before (two extracts in one process wrote
+        // different files). Zero everything, then set the defaults.
+        std::memset(static_cast<void *>(this), 0, sizeof(ProfileProperties));
+        traffic_signal_penalty = 0;
+        u_turn_penalty = 0;
+        max_speed_for_map_matching = DEFAULT_MAX_SPEED;
+        max_collapse_distance = 30.0;
+        continue_straight_at_waypoint = true;
+        use_turn_restrictions = false;
+        left_hand_driving = false;
+        fallback_to_duration = true;
+        std::copy_n("duration", sizeof("duration"), weight_name);
         std::fill(excludable_classes.begin(), excludable_classes.end(), INVALID_CLASS_DATA);
+        weight_precision = 1;
+        force_split_edges = false;
+        call_tagless_node_function = true;
         BOOST_ASSERT(weight_name[MAX_WEIGHT_NAME_LENGTH] == '\0');
     }
 
@@ -141,9 +153,9 @@ struct ProfileProperties
     std::array<char[MAX_CLASS_NAME_LENGTH + 1], MAX_CLASS_INDEX + 1> class_names;
     //! stores the masks of excludable class combinations
     std::array<ClassData, MAX_EXCLUDABLE_CLASSES> excludable_classes;
-    unsigned weight_precision = 1;
-    bool force_split_edges = false;
-    bool call_tagless_node_function = true;
+    unsigned weight_precision;
+    bool force_split_edges;
+    bool call_tagless_node_function;
 };
 } // namespace osrm::extractor
 

@@ -8,6 +8,8 @@
 
 #include <boost/assert.hpp>
 
+#include <cstdint>
+
 namespace osrm::extractor
 {
 
@@ -81,6 +83,10 @@ struct InternalExtractorEdge
     DurationData duration_data;
     // coordinate of the source node
     util::Coordinate source_coordinate;
+    // Position in the parsed input, set by ExtractionContainers::PrepareEdges: the last key of
+    // the sort that picks which of equal parallel edges survives, so the choice is the same at
+    // any thread count.
+    std::uint64_t input_position = 0;
 };
 } // namespace osrm::extractor
 

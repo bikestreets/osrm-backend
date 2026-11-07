@@ -13,6 +13,7 @@
 #include "util/for_each_indexed.hpp"
 #include "util/for_each_pair.hpp"
 #include "util/log.hpp"
+#include "util/parallel_stable_sort.hpp"
 #include "util/std_hash.hpp"
 #include "util/timing_util.hpp"
 
@@ -23,6 +24,7 @@
 #include <tbb/parallel_sort.h>
 
 #include <limits>
+#include <tuple>
 
 namespace
 {
@@ -46,6 +48,12 @@ struct CmpEdgeByOSMTargetID
     }
 };
 
+// Orders edges for the duplicate-edge removal in PrepareEdges, which keeps the first cheapest
+// edge of each (source, target) group in this order. It must be a total order: edges equal in
+// (source, target, name) are common (two ways over the same nodes, a way and its backward
+// half), and tbb::parallel_sort isn't stable, so without a tie-break which of them survived,
+// and in which order the survivors were written, varied with thread timing. That changed the
+// edge count and every id downstream from run to run of the same input.
 struct CmpEdgeByInternalSourceTargetAndName
 {
     using value_type = oe::InternalExtractorEdge;
@@ -63,6 +71,25 @@ struct CmpEdgeByInternalSourceTargetAndName
         if (lhs.result.target == SPECIAL_NODEID)
             return false;
 
+        if (NameLess(lhs, rhs))
+            return true;
+        if (NameLess(rhs, lhs))
+            return false;
+
+        // Annotation ids are handed out per way (and direction) in input order, so this keeps the
+        // edge of the earlier way first. A way can repeat a segment, so the input position
+        // breaks what is still tied.
+        return std::tie(lhs.result.annotation_data,
+                        lhs.result.osm_source_id,
+                        lhs.result.osm_target_id,
+                        lhs.input_position) < std::tie(rhs.result.annotation_data,
+                                                       rhs.result.osm_source_id,
+                                                       rhs.result.osm_target_id,
+                                                       rhs.input_position);
+    }
+
+    bool NameLess(const value_type &lhs, const value_type &rhs) const
+    {
         auto const lhs_name_id = edge_annotation_data[lhs.result.annotation_data].string_view_id;
         auto const rhs_name_id = edge_annotation_data[rhs.result.annotation_data].string_view_id;
         if (lhs_name_id == rhs_name_id)
@@ -460,10 +487,11 @@ void ExtractionContainers::PrepareNodes()
         util::UnbufferedLog log;
         log << "Sorting all nodes         ... " << std::flush;
         TIMER_START(sorting_nodes);
-        tbb::parallel_sort(all_nodes_list.begin(),
-                           all_nodes_list.end(),
-                           [](const auto &left, const auto &right)
-                           { return left.node_id < right.node_id; });
+        // Stable: an input can hold a node twice, and the first copy in this order is the one
+        // used. Unstable, which copy that was depended on thread timing.
+        util::parallelStableSort(all_nodes_list,
+                                 [](const auto &left, const auto &right)
+                                 { return left.node_id < right.node_id; });
         TIMER_STOP(sorting_nodes);
         log << "ok, after " << TIMER_SEC(sorting_nodes) << "s";
     }
@@ -560,6 +588,10 @@ void ExtractionContainers::PrepareNodes()
 
 void ExtractionContainers::PrepareEdges(ScriptingEnvironment &scripting_environment)
 {
+    // The callbacks append edges in input order; the sorts below reorder them.
+    for (std::size_t position = 0; position < all_edges_list.size(); ++position)
+        all_edges_list[position].input_position = position;
+
     // Sort edges by start.
     {
         util::UnbufferedLog log;

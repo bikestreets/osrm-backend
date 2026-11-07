@@ -1,6 +1,7 @@
 #ifndef OSRM_GUIDANCE_TURN_LANE_MATCHER_HPP_
 #define OSRM_GUIDANCE_TURN_LANE_MATCHER_HPP_
 
+#include "guidance/buffer_local_ids.hpp"
 #include "guidance/intersection.hpp"
 #include "guidance/turn_instruction.hpp"
 #include "guidance/turn_lane_data.hpp"
@@ -38,7 +39,7 @@ triviallyMatchLanesToTurns(Intersection intersection,
                            const LaneDataVector &lane_data,
                            const util::NodeBasedDynamicGraph &node_based_graph,
                            const LaneDescriptionID lane_string_id,
-                           util::guidance::LaneDataIdMap &lane_data_to_id);
+                           BufferLaneIDs &lane_ids);
 
 } // namespace osrm::guidance::lanes
 

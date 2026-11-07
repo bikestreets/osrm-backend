@@ -3,9 +3,11 @@
 #include "partitioner/recursive_bisection_state.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
+#include <tbb/global_control.h>
 
 using namespace osrm::partitioner;
 using namespace osrm::util;
@@ -74,6 +76,36 @@ BOOST_AUTO_TEST_CASE(dividing_four_grid_cells)
     for (int i = 0; i < 4; ++i)
         for (int j = 0; j < 4; ++j)
             BOOST_CHECK(i == j || result[i * (rows * cols)] != result[j * (rows * cols)]);
+}
+
+// A grid is all ties: many slopes find cuts of the same size and balance. Which of them won
+// used to depend on which thread finished first, so the bisection ids changed run to run.
+BOOST_AUTO_TEST_CASE(bisection_ids_do_not_depend_on_thread_count)
+{
+    const auto bisect = [](const std::size_t threads)
+    {
+        tbb::global_control control(tbb::global_control::max_allowed_parallelism, threads);
+
+        const int rows = 64;
+        const int cols = 64;
+        auto edges = makeGridEdges(rows, cols, 0);
+        groupEdgesBySource(edges.begin(), edges.end());
+        auto graph = makeBisectionGraph(makeGridCoordinates(rows, cols, 0.01, 0, 0),
+                                        adaptToBisectionEdge(std::move(edges)));
+
+        RecursiveBisection bisection(graph, 32, 1.2, 0.25, 10, 1);
+        return bisection.BisectionIDs();
+    };
+
+    const auto single_threaded = bisect(1);
+    for (int run = 0; run < 10; ++run)
+    {
+        const auto multi_threaded = bisect(8);
+        BOOST_CHECK_EQUAL_COLLECTIONS(single_threaded.begin(),
+                                      single_threaded.end(),
+                                      multi_threaded.begin(),
+                                      multi_threaded.end());
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

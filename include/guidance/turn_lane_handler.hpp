@@ -5,6 +5,7 @@
 #include "extractor/string_table.hpp"
 #include "extractor/turn_lane_types.hpp"
 
+#include "guidance/buffer_local_ids.hpp"
 #include "guidance/intersection.hpp"
 #include "guidance/turn_analysis.hpp"
 #include "guidance/turn_lane_data.hpp"
@@ -59,14 +60,14 @@ class TurnLaneHandler
                     const extractor::RestrictionMap &node_restriction_map,
                     const extractor::ObstacleMap &obstacle_nodes,
                     const extractor::TurnLanesIndexedArray &turn_lanes_data,
-                    extractor::LaneDescriptionMap &lane_description_map,
-                    const TurnAnalysis &turn_analysis,
-                    util::guidance::LaneDataIdMap &id_map);
+                    const TurnAnalysis &turn_analysis);
 
     ~TurnLaneHandler();
 
-    [[nodiscard]] Intersection
-    assignTurnLanes(const NodeID at, const EdgeID via_edge, Intersection intersection);
+    [[nodiscard]] Intersection assignTurnLanes(const NodeID at,
+                                               const EdgeID via_edge,
+                                               Intersection intersection,
+                                               BufferLaneIDs &lane_ids);
 
   private:
     mutable std::atomic<std::size_t> count_handled;
@@ -83,9 +84,7 @@ class TurnLaneHandler
 
     std::vector<std::uint32_t> turn_lane_offsets;
     std::vector<extractor::TurnLaneType::Mask> turn_lane_masks;
-    extractor::LaneDescriptionMap &lane_description_map;
     const TurnAnalysis &turn_analysis;
-    util::guidance::LaneDataIdMap &id_map;
 
     // Find out which scenario we have to handle
     TurnLaneScenario deduceScenario(const NodeID at,
@@ -107,7 +106,8 @@ class TurnLaneHandler
     // in case of a simple intersection, assign the lane entries
     [[nodiscard]] Intersection simpleMatchTuplesToTurns(Intersection intersection,
                                                         const LaneDataVector &lane_data,
-                                                        const LaneDescriptionID lane_string_id);
+                                                        const LaneDescriptionID lane_string_id,
+                                                        BufferLaneIDs &lane_ids);
 
     // partition lane data into lane data relevant at current turn and at next turn
     [[nodiscard]] std::pair<TurnLaneHandler::LaneDataVector, TurnLaneHandler::LaneDataVector>
@@ -121,7 +121,8 @@ class TurnLaneHandler
     [[nodiscard]] Intersection handleSliproadTurn(Intersection intersection,
                                                   const LaneDescriptionID lane_description_id,
                                                   LaneDataVector lane_data,
-                                                  const Intersection &previous_intersection);
+                                                  const Intersection &previous_intersection,
+                                                  BufferLaneIDs &lane_ids);
 
     // get the lane data for an intersection
     void extractLaneData(const EdgeID via_edge,

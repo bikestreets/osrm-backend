@@ -6,8 +6,7 @@
 #include "extractor/node_data_container.hpp"
 #include "util/dynamic_graph.hpp"
 #include "util/graph_utils.hpp"
-
-#include <tbb/parallel_sort.h>
+#include "util/parallel_stable_sort.hpp"
 
 namespace osrm::util
 {
@@ -88,7 +87,11 @@ NodeBasedDynamicGraphFromEdges(NodeID number_of_nodes,
             BOOST_ASSERT(output_edge.data.distance >= EdgeDistance{0});
         });
 
-    tbb::parallel_sort(edges_list.begin(), edges_list.end());
+    // Stable: InputEdge orders by (source, target) only, and parallel edges between two nodes
+    // are common (ways sharing nodes, an edge and its reverse copy). Unstable, their adjacency
+    // order, and with it the graph compression and every edge id after it, could change from
+    // run to run. The input order is the extractor's, which is deterministic.
+    parallelStableSort(edges_list);
 
     return NodeBasedDynamicGraph(number_of_nodes, edges_list);
 }
